@@ -173,6 +173,17 @@ export function managementApi(token, fetcher = fetch) {
     return r.status === 204 ? null : r.json();
   };
 }
+export function provisionErrorAnnotation(error, token) {
+  const text = String(
+    error?.message || "Неизвестная ошибка настройки Supabase",
+  );
+  const redacted = token ? text.split(token).join("[REDACTED]") : text;
+  const escaped = redacted
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+  return "::error title=Supabase connection::" + escaped;
+}
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
@@ -210,7 +221,7 @@ if (
       },
     });
   } catch (e) {
-    console.error(e.message);
+    console.error(provisionErrorAnnotation(e, token));
     process.exitCode = 1;
   }
 }

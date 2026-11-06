@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { provision, managementApi } from "../scripts/provision.mjs";
+import {
+  provision,
+  managementApi,
+  provisionErrorAnnotation,
+} from "../scripts/provision.mjs";
 function setup({
   existing = false,
   otherEvent = false,
@@ -177,4 +181,14 @@ test("paid or unknown plan cannot create a billable project", async () => {
       !t.calls.some((c) => c.path === "/projects" && c.method === "POST"),
     );
   }
+});
+
+test("public diagnosis redacts token and cannot inject a second annotation", () => {
+  const line = provisionErrorAnnotation(
+    new Error("denied private-token\n::notice::fake"),
+    "private-token",
+  );
+  assert.ok(!line.includes("private-token"));
+  assert.ok(!line.includes("\n"));
+  assert.match(line, /%0A::notice::fake/);
 });
