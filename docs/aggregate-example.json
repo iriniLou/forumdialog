@@ -1,0 +1,7 @@
+{
+  "_note": "FORMAT ONLY. Replace IDs and counts with verified real aggregates. No test rows 2–8. Never import this file as forum data.",
+  "n": 5,
+  "cutoff": "2026-11-12T09:30:00+03:00",
+  "sample": "Описание реальной выборки; тестовые строки исключены вручную",
+  "counts": [{"id": "REPLACE_WITH_OPTION_UUID_A", "count": 2}, {"id": "REPLACE_WITH_OPTION_UUID_B", "count": 3}]
+}
