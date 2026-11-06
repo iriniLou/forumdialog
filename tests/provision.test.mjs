@@ -192,3 +192,21 @@ test("public diagnosis redacts token and cannot inject a second annotation", () 
   assert.ok(!line.includes("\n"));
   assert.match(line, /%0A::notice::fake/);
 });
+
+test("management permission denial has a status and safe classification", async () => {
+  const api = managementApi("private-token", async () => ({
+    ok: false,
+    status: 403,
+    json: async () => ({
+      message:
+        "insufficient permissions for organization_projects_create private-token",
+    }),
+  }));
+  await assert.rejects(
+    api("/projects", "POST", {}),
+    (e) =>
+      e.status === 403 &&
+      e.message.includes("Отказ по правам доступа") &&
+      !e.message.includes("private-token"),
+  );
+});

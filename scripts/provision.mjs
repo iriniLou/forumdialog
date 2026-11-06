@@ -37,12 +37,22 @@ export async function provision({
       throw Error(
         "Создание проекта остановлено: бесплатный тариф выбранной организации не подтверждён. Платные ресурсы автоматически не создаются",
       );
-    project = await api("/projects", "POST", {
-      name: orgName,
-      organization_slug: slug,
-      db_pass: randomBytes(32).toString("base64url"),
-      region_selection: { type: "smartGroup", code: "emea" },
-    });
+    try {
+      project = await api("/projects", "POST", {
+        name: orgName,
+        organization_slug: slug,
+        db_pass: randomBytes(32).toString("base64url"),
+        region_selection: { type: "smartGroup", code: "emea" },
+      });
+    } catch (error) {
+      if (error.status === 403) {
+        const available = projects.filter(
+          (p) => (p.organization_slug || p.organization_id) === slug,
+        ).length;
+        error.message += ` Существующих доступных проектов в выбранной организации: ${available}. Создание проекта требует разрешения Organization Projects → Read-write.`;
+      }
+      throw error;
+    }
   }
   const ref = project.ref || project.id;
   if (!/^[a-z]{20}$/.test(ref))
@@ -166,10 +176,29 @@ export function managementApi(token, fetcher = fetch) {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!r.ok)
-      throw Error(
-        `Supabase Management API: ${method} ${path.split("?")[0]} → HTTP ${r.status}. Содержимое ответа скрыто для защиты ключей`,
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      // Classify only known non-secret reasons; never print provider response text.
+      const text = String(
+        body?.message || body?.error_description || body?.error || "",
+      ).toLowerCase();
+      let reason = "";
+      if (
+        /insufficient.scope|organization_projects_create|missing.*permission|insufficient.*permission|not.*permission|not.*privilege|not.authorized/.test(
+          text,
+        )
+      )
+        reason = " Отказ по правам доступа.";
+      else if (/quota|free.*project|project.*limit|maximum.*project/.test(text))
+        reason = " Ограничение количества проектов.";
+      else if (/suspend|banned|blocked/.test(text))
+        reason = " Ограничение аккаунта со стороны Supabase.";
+      const error = new Error(
+        `Supabase Management API: ${method} ${path.split("?")[0]} → HTTP ${r.status}.${reason} Содержимое ответа скрыто для защиты ключей`,
       );
+      error.status = r.status;
+      throw error;
+    }
     return r.status === 204 ? null : r.json();
   };
 }
