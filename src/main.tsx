@@ -13,7 +13,9 @@ import {
   type ResponseRow,
 } from "./model";
 import "./style.css";
-const parts = location.pathname.split("/"),
+import { appPath, base, defaultCode, routeParts } from "./routes";
+import { exportXlsx } from "./xlsx";
+const parts = routeParts,
   mode = parts[1] || "home";
 function download(name: string, data: string, type = "text/plain") {
   const url = URL.createObjectURL(new Blob([data], { type }));
@@ -25,10 +27,11 @@ function download(name: string, data: string, type = "text/plain") {
 }
 function App() {
   const [code, setCode] = useState(
-      parts[2] || localStorage.getItem("eventCode") || "DEMO",
+      parts[2] || localStorage.getItem("eventCode") || defaultCode,
     ),
     [b, setB] = useState<Board>(),
     [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
     [updated, setUpdated] = useState(""),
     [busy, setBusy] = useState(false),
     [auth, setAuth] = useState(demo),
@@ -85,12 +88,12 @@ function App() {
       u.protocol === "https:" &&
       !["localhost", "127.0.0.1"].includes(u.hostname)
     )
-      joinUrl = u.origin + "/join/" + encodeURIComponent(code);
+      joinUrl = u.origin + base + "join/" + encodeURIComponent(code);
   } catch {}
   if (mode === "help")
     return (
       <main className="help">
-        <a href="/">← Главная</a>
+        <a href={appPath("/")}>← Главная</a>
         <h1>Вместе — проще</h1>
         <h2>Участнику</h2>
         <p>
@@ -140,11 +143,12 @@ function App() {
             <br />
             <em>Живой разговор.</em>
           </h1>
+          <p>13 ноября 2026 · 10:00–11:30 МСК · Ольга Петровна Доремидова</p>
           <p className="lead">
             Методическая сессия: от вопросов — к работающим решениям.
           </p>
           <div className="grid">
-            <a className="tile coral" href="/join/DEMO">
+            <a className="tile coral" href={appPath("/join/" + defaultCode)}>
               <span>01 / УЧАСТВОВАТЬ</span>
               <h2>
                 Ваш голос
@@ -153,7 +157,7 @@ function App() {
               </h2>
               <p>Ответить на вопрос с телефона</p>
             </a>
-            <a className="tile blue" href="/screen/DEMO">
+            <a className="tile blue" href={appPath("/screen/" + defaultCode)}>
               <span>02 / ОБЩАЯ ДОСКА</span>
               <h2>
                 Посмотреть,
@@ -163,7 +167,7 @@ function App() {
               <p>Вопросы, результаты и практики</p>
             </a>
           </div>
-          <a className="quiet" href="/admin">
+          <a className="quiet" href={appPath("/admin")}>
             Панель организатора →
           </a>
         </main>
@@ -215,6 +219,29 @@ function App() {
                   />
                 </label>
                 <button disabled={busy}>Войти</button>
+                <button
+                  type="button"
+                  disabled={busy || !email}
+                  onClick={async () => {
+                    setBusy(true);
+                    const { error } = await db!.auth.signInWithOtp({
+                      email,
+                      options: {
+                        shouldCreateUser: false,
+                        emailRedirectTo: location.origin + appPath("/admin"),
+                      },
+                    });
+                    setError(error?.message || "");
+                    setNotice(
+                      error
+                        ? ""
+                        : "Если адрес организатора настроен, письмо со ссылкой для входа отправлено. Проверьте почту.",
+                    );
+                    setBusy(false);
+                  }}
+                >
+                  Войти по ссылке из письма
+                </button>
               </form>
             ) : (
               <div className="toolbar">
@@ -245,6 +272,11 @@ function App() {
               </div>
             )}
           </>
+        )}
+        {notice && (
+          <p role="status" className="card">
+            {notice}
+          </p>
         )}
         {error && (
           <div className="error" role="alert">
@@ -348,10 +380,10 @@ function App() {
 function Header() {
   return (
     <header>
-      <a className="brand" href="/">
+      <a className="brand" href={appPath("/")}>
         <span className="brand-icon">↗</span>Живой разговор
       </a>
-      <a href="/help">Как это работает ↗</a>
+      <a href={appPath("/help")}>Как это работает ↗</a>
     </header>
   );
 }
@@ -573,10 +605,10 @@ function Admin({
   return (
     <>
       <div className="toolbar">
-        <a href={"/screen/" + b.code} target="_blank" rel="noreferrer">
+        <a href={appPath("/screen/" + b.code)} target="_blank" rel="noreferrer">
           Проектор ↗
         </a>
-        <a href={"/join/" + b.code} target="_blank" rel="noreferrer">
+        <a href={appPath("/join/" + b.code)} target="_blank" rel="noreferrer">
           Участник ↗
         </a>
         <span>
@@ -640,7 +672,7 @@ function Admin({
                   try {
                     const { data, error } = await db!.rpc("create_event", {
                       p_title: title,
-                      p_date: "2026-11-12",
+                      p_date: "2026-11-13",
                       p_questions: questions,
                     });
                     if (error) throw error;
@@ -651,7 +683,7 @@ function Admin({
                   }
                 }}
               >
-                Создать событие по сценарию 12 ноября
+                Создать событие по сценарию 13 ноября
               </button>
             )}
           </>
@@ -829,6 +861,15 @@ function Admin({
               }
             >
               CSV · Excel
+            </button>
+            <button
+              onClick={() =>
+                exportXlsx(b).catch(() =>
+                  alert("Не удалось создать XLSX. Попробуйте CSV."),
+                )
+              }
+            >
+              XLSX · Excel
             </button>
             <button
               onClick={() => {

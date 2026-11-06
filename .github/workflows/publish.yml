@@ -1,0 +1,110 @@
+name: Publish forum
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+permissions:
+  contents: read
+concurrency:
+  group: forum-production
+  cancel-in-progress: false
+jobs:
+  activation:
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - id: check
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'Add the SUPABASE_ACCESS_TOKEN repository Actions secret to activate publishing.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+          live=$(curl -fsS "https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/build.json" | jq -r '.commit' || true)
+          verified=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=forum-links-and-qr" --jq ".artifacts[] | select(.workflow_run.head_sha == \"$GITHUB_SHA\" and .expired == false) | .id" || true)
+          if [[ "$GITHUB_EVENT_NAME" = schedule && "$(date -u +%F)" > '2026-11-13' ]]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          elif [ "$live" = "$GITHUB_SHA" ] && [ -n "$verified" ] && [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+  checks:
+    needs: activation
+    if: needs.activation.outputs.changed == 'true' && (github.event_name != 'schedule' || needs.activation.outputs.enabled == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test && npm run test:provision && npm run test:db && npm run build
+      - run: npm run test:e2e
+        env:
+          CHROMIUM_PATH: /usr/bin/google-chrome
+  publish:
+    needs: [activation, checks]
+    if: needs.activation.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Configure the shared database and email organiser invitation
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          export PUBLIC_ORIGIN="https://${GITHUB_REPOSITORY_OWNER,,}.github.io"
+          export VITE_BASE_PATH="/${GITHUB_REPOSITORY#*/}/"
+          node scripts/provision.mjs
+      - name: Verify database before publication
+        run: node scripts/verify-remote.mjs backend
+      - run: npm run build
+      - name: Ensure the administrative key is absent from the public bundle
+        run: node scripts/check-bundle.mjs
+      - name: Public build marker
+        run: node -e "require('fs').writeFileSync('dist/build.json',JSON.stringify({commit:process.env.GITHUB_SHA,backend_configured:true}))"
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify published participant, moderator and screen interfaces
+        run: node scripts/verify-remote.mjs public
+        env:
+          CHROMIUM_PATH: /usr/bin/google-chrome
+      - name: Export verified participant QR
+        run: node scripts/qr.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forum-links-and-qr
+          path: deployment-evidence/
+          retention-days: 30
+      - name: Links for organiser
+        run: cat deployment-evidence/links.md >> "$GITHUB_STEP_SUMMARY"

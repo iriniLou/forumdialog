@@ -4,10 +4,10 @@
     "sent": 350,
     "accepted": 350,
     "window_ms": 25000,
-    "elapsed_ms": 24947,
+    "elapsed_ms": 24948,
     "p50_ms": 5,
-    "p95_ms": 8,
-    "max_ms": 21
+    "p95_ms": 12,
+    "max_ms": 58
   },
   "limitations": "Local PostgreSQL WASM only; no network, Supabase Auth issuance, 350 realtime connections, or real device validation."
 }

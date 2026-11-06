@@ -10,7 +10,9 @@ test("two participants, moderation, oral entry, hide and mobile layout", async (
   await a.setViewportSize({ width: 360, height: 780 });
   await a.goto("/join/DEMO");
   await expect(
-    a.getByRole("heading", { name: "Что для вас «Разговоры о важном»?" }),
+    a.getByRole("heading", {
+      name: "Так что же для вас «Разговоры о важном»?",
+    }),
   ).toBeVisible();
   await expect(a.locator("textarea")).toHaveAttribute("maxlength", "80");
   await a.screenshot({
@@ -136,21 +138,19 @@ test("preforum waiting, verified aggregate import, precise N and CSV export", as
     else if (dialog.message().includes("Число реальных"))
       await dialog.accept("5");
     else if (dialog.message().includes("Дата"))
-      await dialog.accept("2026-11-12T09:00:00+03:00");
+      await dialog.accept("2026-11-13T09:00:00+03:00");
     else
       await dialog.accept(
         "Тестовая выборка, тестовые строки исключены вручную",
       );
   });
-  await poll
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "aggregate.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(
-        "категория;число\nПервая категория;2\nВторая категория;3",
-      ),
-    });
+  await poll.locator("input[type=file]").setInputFiles({
+    name: "aggregate.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "категория;число\nПервая категория;2\nВторая категория;3",
+    ),
+  });
   await expect(poll).toContainText("N=5");
   await poll
     .getByRole("button", { name: "Показать итоги", exact: true })
@@ -168,4 +168,17 @@ test("preforum waiting, verified aggregate import, precise N and CSV export", as
   const data = Buffer.concat(chunks);
   expect([...data.subarray(0, 3)]).toEqual([239, 187, 191]);
   expect(data.toString("utf8")).toContain("preforum");
+  const xlsxFile = page.waitForEvent("download");
+  await page.getByRole("button", { name: "XLSX · Excel", exact: true }).click();
+  const workbookFile = await xlsxFile;
+  const xlsxStream = await workbookFile.createReadStream();
+  const xlsxChunks = [];
+  for await (const c of xlsxStream!) xlsxChunks.push(c);
+  const module = await import("exceljs");
+  const { Workbook } = module.default || module;
+  const workbook = new Workbook();
+  await workbook.xlsx.load(Buffer.concat(xlsxChunks));
+  const sheet = workbook.getWorksheet("Итоги сессии")!;
+  expect(sheet.getRow(1).getCell(1).value).toBe("event_id");
+  expect(sheet.getRow(2).getCell(3).value).toBe("preforum");
 });

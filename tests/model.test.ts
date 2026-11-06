@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { initialDemo, csv, parseAggregates, report } from "../src/model.ts";
-test("v2 has one phone question, six oral prompts and no fabricated answers", () => {
+test("forum has a short phone question and anonymous question box, six oral prompts and no fabricated answers", () => {
   const b = initialDemo();
-  assert.equal(b.polls.filter((p) => p.source === "live").length, 1);
+  assert.equal(b.polls.filter((p) => p.source === "live").length, 2);
   assert.equal(b.polls[0].max_length, 80);
   assert.equal(b.polls.filter((p) => p.source === "oral").length, 6);
   assert.ok(b.polls.every((p) => p.n === 0));
@@ -41,8 +41,8 @@ test("memo keeps source, time and expert status", () => {
       category: "решение",
       tags: "время",
       resolution: "решено",
-      created_at: "2026-11-12T07:30:00Z",
+      created_at: "2026-11-13T07:30:00Z",
     },
   ];
-  assert.match(report(b), /oral.*2026-11-12.*решено/);
+  assert.match(report(b), /oral.*2026-11-13.*решено/);
 });

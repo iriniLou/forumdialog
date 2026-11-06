@@ -17,7 +17,7 @@ await db.query(`insert into auth.users values ($1),($2),($3)`, [
 ]);
 const event = (
   await db.query(
-    `insert into events(title,date,code) values ('Тест','2026-11-12','TEST') returning id`,
+    `insert into events(title,date,code) values ('Тест','2026-11-13','TEST') returning id`,
   )
 ).rows[0].id;
 for (const [u, r] of [
@@ -50,7 +50,7 @@ async function pass(name, fn) {
   console.log("PASS", name);
 }
 await pass(
-  "seed creates the 13 v2 screens without fabricated answers",
+  "seed creates the 14 forum screens without fabricated answers",
   async () => {
     await db.exec(readFileSync("supabase/seed.sql", "utf8"));
     assert.equal(
@@ -59,7 +59,7 @@ await pass(
           event,
         ])
       ).rows[0].n,
-      13,
+      14,
     );
   },
 );
@@ -186,7 +186,7 @@ await pass(
 await pass("cross-event IDs rejected", async () => {
   const other = (
     await db.query(
-      `insert into events(title,date) values ('Другое','2026-11-12') returning code`,
+      `insert into events(title,date) values ('Другое','2026-11-13') returning code`,
     )
   ).rows[0].code;
   await as(admin, () =>
@@ -244,7 +244,7 @@ await pass(
     const payload = {
       id,
       n: 5,
-      cutoff: "2026-11-12T09:00:00+03:00",
+      cutoff: "2026-11-13T09:00:00+03:00",
       sample: "Тестовая выборка",
       counts: [
         { id: opts[0].id, count: 2 },

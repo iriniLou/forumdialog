@@ -6,6 +6,8 @@ if (Boolean(url) !== Boolean(key))
   throw Error("Укажите обе переменные Supabase или удалите обе для демо");
 export const db = url && key ? createClient(url, key) : null;
 export const demo = !db;
+if (import.meta.env.VITE_REQUIRE_BACKEND === "true" && !db)
+  throw Error("Публикация остановлена: общая база не подключена");
 const storage = "forumdialog.demo.v1";
 const sessionKey = "forumdialog.demo.session";
 let sid = sessionStorage.getItem(sessionKey);
@@ -84,7 +86,7 @@ export async function vote(
       poll_id: p.id,
       text: text.trim(),
       status: "pending",
-      category: p.id === "p6" ? "вопрос" : "практика",
+      category: (p.metadata?.default_category || "практика") as Category,
       tags: "",
       resolution: "требуется ответ",
       created_at: new Date().toISOString(),

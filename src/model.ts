@@ -41,54 +41,9 @@ export type Board = {
   audit?: unknown[];
   role?: string;
 };
-export const legacyQuestions = [
-  {
-    title: "Как вы готовились к последнему занятию?",
-    kind: "single",
-    labels: [
-      "Заранее изучил(а) и адаптировал(а)",
-      "Заранее изучил(а) и почти не менял(а)",
-      "Посмотрел(а) в день занятия",
-      "Непосредственно перед или в процессе",
-      "Подготовил(а) собственный вариант",
-      "Лично не провожу",
-    ],
-  },
-  {
-    title: "Что для вас главное в занятии?",
-    kind: "single",
-    labels: ["Узнать новое", "Обсудить и понять", "Сделать осознанный выбор"],
-  },
-  {
-    title: "Что нового вы заметили в 2026/2027 учебном году?",
-    kind: "text",
-    max: 120,
-  },
-  {
-    title: "Ученики увлечённо обсуждают второй вопрос — что делаете?",
-    kind: "single",
-    labels: [
-      "Останавливаю обсуждение ради всех пунктов",
-      "Сохраняю содержательный разговор и перестраиваю время",
-      "Откладываю все выводы",
-    ],
-  },
-  {
-    title: "Как вы продолжаете разговор после занятия?",
-    kind: "multi",
-    labels: [
-      "Я сам",
-      "Я с командой",
-      "Я с семьёй",
-      "Пока не использую постразговор",
-    ],
-  },
-  { title: "Что попробуете в ближайший понедельник?", kind: "text", max: 250 },
-  { title: "Какой вопрос остался без ответа?", kind: "text", max: 300 },
-] as const;
 export const questions = [
   {
-    title: "Что для вас «Разговоры о важном»?",
+    title: "Так что же для вас «Разговоры о важном»?",
     kind: "text",
     max: 80,
     source: "live",
@@ -111,13 +66,21 @@ export const questions = [
   },
   { title: "Темы и подходы", kind: "text", source: "slide" },
   { title: "Фрагмент сценария", kind: "text", source: "slide" },
+  {
+    title:
+      "Какой вопрос или проблему из педагогической практики вы хотели бы обсудить?",
+    kind: "text",
+    max: 250,
+    source: "live",
+    category: "вопрос",
+  },
 ] as const;
 export function initialDemo(): Board {
   return {
     id: "demo",
     code: "DEMO",
     title: "Живой разговор",
-    date: "2026-11-12",
+    date: "2026-11-13",
     timezone: "Europe/Moscow",
     status: "active",
     hidden: false,
@@ -129,6 +92,9 @@ export function initialDemo(): Board {
       kind: q.kind as Poll["kind"],
       source: q.source as Poll["source"],
       max_length: "max" in q ? q.max! : 250,
+      metadata: ("category" in q
+        ? { default_category: q.category }
+        : {}) as Record<string, string>,
       status: i === 0 ? "open" : "prepared",
       n: 0,
       options: [],

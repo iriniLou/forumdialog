@@ -43,7 +43,7 @@ if exists(select 1 from public.votes where anonymous_session_id=u and created_at
 if p.kind='text' then if length(trim(p_text))<1 or length(p_text)>p.max_length or cardinality(p_choices)<>0 then raise exception 'Проверьте длину ответа';end if;
 else if cardinality(p_choices) is null or cardinality(p_choices)<1 or (p.kind='single' and cardinality(p_choices)<>1) or cardinality(p_choices)<>(select count(distinct x) from unnest(p_choices) x) or exists(select 1 from unnest(p_choices) x where not exists(select 1 from public.options where id=x and poll_id=p.id)) then raise exception 'Недопустимые варианты';end if;end if;
 insert into public.votes(event_id,poll_id,anonymous_session_id,choices) values(e.id,p.id,u,p_choices);
-if p.kind='text' then insert into public.open_responses(event_id,poll_id,text) values(e.id,p.id,trim(p_text));end if;
+if p.kind='text' then insert into public.open_responses(event_id,poll_id,text,category) values(e.id,p.id,trim(p_text),coalesce(p.metadata->>'default_category','практика'));end if;
 end $$;
 create function public.create_event(p_title text,p_date date,p_questions jsonb) returns text language plpgsql security definer set search_path='' as $$ declare e public.events;q jsonb;p uuid;pos int:=0;begin
 -- Only an existing administrator can create events; bootstrap manually in SQL Editor.
@@ -51,7 +51,7 @@ if not exists(select 1 from public.admin_roles where user_id=auth.uid() and role
 insert into public.events(title,date) values(p_title,p_date) returning * into e;
 insert into public.admin_roles values(auth.uid(),e.id,'admin');
 for q in select * from jsonb_array_elements(p_questions) loop
-insert into public.polls(event_id,title,kind,source,max_length,position) values(e.id,q->>'title',q->>'kind',q->>'source',coalesce((q->>'max')::int,250),pos) returning id into p;pos:=pos+1;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e.id,q->>'title',q->>'kind',q->>'source',coalesce((q->>'max')::int,250),pos,case when q ? 'category' then jsonb_build_object('default_category',q->>'category') else '{}'::jsonb end) returning id into p;pos:=pos+1;
 end loop;return e.code;end $$;
 create function public.manage_event(p_code text,p_op text,p_payload jsonb) returns text language plpgsql security definer set search_path='' as $$
 declare e public.events;r text;p public.polls;x public.open_responses;pid uuid;v jsonb;i int:=0;total int:=0;begin
