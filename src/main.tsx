@@ -4,6 +4,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { board, action, vote, demo, db } from "./api";
 import {
   questions,
+  percentage,
+  normaliseAggregate,
   csv,
   exportRows,
   parseAggregates,
@@ -518,6 +520,9 @@ function Results({ poll }: { poll: Poll }) {
       )}
       {poll.source === "preforum" && (
         <p>
+          {poll.metadata?.preliminary === "yes" && (
+            <strong>Предварительные результаты · </strong>
+          )}
           {poll.metadata?.cutoff} · {poll.metadata?.sample}
         </p>
       )}
@@ -557,10 +562,7 @@ function Results({ poll }: { poll: Poll }) {
               <div className="bar-label">
                 <span>{o.label}</span>
                 <b>
-                  {o.count}{" "}
-                  <small>
-                    {poll.n ? Math.round((o.count / poll.n) * 100) : 0}%
-                  </small>
+                  {o.count} <small>{percentage(o.count, poll.n)}%</small>
                 </b>
               </div>
               <div className="track">
@@ -598,7 +600,8 @@ function Admin({
 }) {
   const [edit, setEdit] = useState<Poll | null | undefined>(),
     [filter, setFilter] = useState("all"),
-    [meta, setMeta] = useState<Poll>();
+    [meta, setMeta] = useState<Poll>(),
+    [aggregate, setAggregate] = useState<Poll>();
   const canEdit = b.role === "admin",
     canModerate = canEdit || b.role === "moderator",
     canOperate = canEdit || b.role === "operator";
@@ -708,6 +711,16 @@ function Admin({
           }}
         />
       )}
+      {aggregate && (
+        <AggregateEditor
+          key={aggregate.id}
+          poll={aggregate}
+          close={() => setAggregate(undefined)}
+          save={async (payload) => {
+            if (await run("import", payload)) setAggregate(undefined);
+          }}
+        />
+      )}
       <Capture b={b} run={run} />
       <h2>
         Сценарий сессии{" "}
@@ -744,22 +757,27 @@ function Admin({
               <>
                 <button onClick={() => setEdit(p)}>Изменить</button>
                 {p.source === "preforum" && p.kind === "single" && (
-                  <label className="file-button">
-                    Импорт CSV
-                    <input
-                      type="file"
-                      accept=".csv,.json"
-                      onChange={async (e) => {
-                        try {
-                          const f = e.target.files?.[0];
-                          if (f) await importFile(f, p, run);
-                        } catch (err) {
-                          alert((err as Error).message);
-                        }
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
+                  <>
+                    <button onClick={() => setAggregate(p)}>
+                      Обновить срез
+                    </button>
+                    <label className="file-button">
+                      Импорт CSV / JSON
+                      <input
+                        type="file"
+                        accept=".csv,.json"
+                        onChange={async (e) => {
+                          try {
+                            const f = e.target.files?.[0];
+                            if (f) await importFile(f, p, run);
+                          } catch (err) {
+                            alert((err as Error).message);
+                          }
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </>
                 )}
               </>
             )}
@@ -1094,7 +1112,7 @@ function savePNG(p: Poll) {
     const yy = y + 150 + i * 105;
     x.fillStyle = "#202020";
     x.fillText(
-      `${o.label} — ${o.count} (${p.n ? Math.round((o.count / p.n) * 100) : 0}%)`,
+      `${o.label} — ${o.count} (${percentage(o.count, p.n)}%)`,
       80,
       yy,
     );
@@ -1282,13 +1300,18 @@ async function importFile(
   run: (o: string, p: Record<string, unknown>) => Promise<unknown>,
 ) {
   const raw = await f.text();
-  let counts, n, cutoff, sample;
+  let counts,
+    n,
+    cutoff,
+    sample,
+    preliminary = "yes";
   if (f.name.endsWith(".json")) {
-    const data = JSON.parse(raw);
+    const data = normaliseAggregate(JSON.parse(raw), p);
     counts = data.counts;
     n = data.n;
     cutoff = data.cutoff;
     sample = data.sample;
+    preliminary = data.preliminary;
   } else {
     counts = parseAggregates(raw, p);
     n = Number(prompt("Число реальных ответов N (без пробных строк 2–8)"));
@@ -1298,7 +1321,15 @@ async function importFile(
   if (!Number.isInteger(n) || n < 1 || !cutoff || !sample)
     throw Error("Нужны N, время среза и описание выборки");
   if (!confirm("Агрегат обезличен, пробные ответы исключены вручную?")) return;
-  await run("import", { id: p.id, counts, n, cutoff, sample });
+  await run("import", {
+    id: p.id,
+    counts,
+    n,
+    cutoff,
+    sample,
+    preliminary,
+    expected_version: Number(p.metadata?.version || 0),
+  });
 }
 function MetadataEditor({
   poll,
@@ -1356,6 +1387,130 @@ function MetadataEditor({
         </label>
       )}
       <button>Сохранить</button>
+      <button type="button" onClick={close}>
+        Отмена
+      </button>
+    </form>
+  );
+}
+function AggregateEditor({
+  poll,
+  close,
+  save,
+}: {
+  poll: Poll;
+  close: () => void;
+  save: (p: Record<string, unknown>) => Promise<void>;
+}) {
+  const [counts, setCounts] = useState(
+      poll.options.map((o) => ({ id: o.id, count: o.count })),
+    ),
+    [n, setN] = useState(poll.imported_n || poll.n || 0),
+    [cutoff, setCutoff] = useState(poll.metadata?.cutoff || ""),
+    [sample, setSample] = useState(poll.metadata?.sample || ""),
+    [preliminary, setPreliminary] = useState(
+      poll.metadata?.preliminary !== "no",
+    ),
+    [saving, setSaving] = useState(false);
+  const total = counts.reduce((a, c) => a + c.count, 0),
+    valid =
+      Number.isInteger(n) &&
+      n > 0 &&
+      total === n &&
+      counts.length >= 2 &&
+      counts.every(
+        (c) => Number.isInteger(c.count) && c.count >= 0 && c.count <= 1000000,
+      );
+  return (
+    <form
+      className="card aggregate-editor"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+          await save({
+            id: poll.id,
+            counts,
+            n,
+            cutoff,
+            sample,
+            preliminary: preliminary ? "yes" : "no",
+            expected_version: Number(poll.metadata?.version || 0),
+          });
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <h2>Обновление предварительного среза</h2>
+      <p>
+        {poll.title}. Предыдущая версия сохраняется в закрытой истории.
+        Изменения видны без повторной публикации сайта.
+      </p>
+      {!counts.length && <p>Сначала задайте варианты через «Изменить».</p>}
+      {poll.options.map((o, i) => (
+        <label key={o.id}>
+          {o.label}
+          <input
+            type="number"
+            min="0"
+            max="1000000"
+            value={counts[i].count}
+            required
+            onChange={(e) =>
+              setCounts(
+                counts.map((c, j) =>
+                  j === i ? { ...c, count: Number(e.target.value) } : c,
+                ),
+              )
+            }
+          />
+        </label>
+      ))}
+      <label>
+        Число реальных ответов N
+        <input
+          type="number"
+          min="1"
+          max="1000000"
+          value={n}
+          required
+          onChange={(e) => setN(Number(e.target.value))}
+        />
+      </label>
+      <p role="status">
+        Сумма по категориям: {total}.{" "}
+        {total !== n ? "Сумма должна совпадать с N." : "Сумма совпадает с N."}
+      </p>
+      <label>
+        Дата и время среза (МСК; если время неизвестно, укажите это)
+        <input
+          value={cutoff}
+          maxLength={200}
+          required
+          onChange={(e) => setCutoff(e.target.value)}
+        />
+      </label>
+      <label>
+        Описание выборки и исключения тестовых строк
+        <textarea
+          value={sample}
+          maxLength={1000}
+          required
+          onChange={(e) => setSample(e.target.value)}
+        />
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={preliminary}
+          onChange={(e) => setPreliminary(e.target.checked)}
+        />{" "}
+        Предварительные результаты
+      </label>
+      <button disabled={!valid || saving}>
+        {saving ? "Сохраняем…" : "Сохранить срез"}
+      </button>
       <button type="button" onClick={close}>
         Отмена
       </button>

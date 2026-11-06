@@ -1,3 +1,4 @@
+import preforum from "../data/preforum-2026-11-06.json" with { type: "json" };
 export type Status = "prepared" | "open" | "closed" | "results";
 export type Category =
   | "проблема"
@@ -39,6 +40,7 @@ export type Board = {
   polls: Poll[];
   responses?: ResponseRow[];
   audit?: unknown[];
+  imports?: unknown[];
   role?: string;
 };
 export const questions = [
@@ -56,8 +58,20 @@ export const questions = [
     "Подросток: «Это всё красивые слова». Какую первую фразу скажете?",
     "Как продолжаете разговор после звонка?",
   ].map((title) => ({ title, kind: "text", max: 250, source: "oral" })),
-  { title: "Чего не хватает", kind: "single", source: "preforum" },
-  { title: "Подготовка к занятию", kind: "single", source: "preforum" },
+  {
+    title: "Чего не хватает",
+    kind: "single",
+    source: "preforum",
+    key: "missing",
+    labels: preforum.polls[0].categories.map((c) => c.label),
+  },
+  {
+    title: "Как готовились",
+    kind: "single",
+    source: "preforum",
+    key: "preparation",
+    labels: preforum.polls[1].categories.map((c) => c.label),
+  },
   { title: "Вопрос экспертам", kind: "text", max: 300, source: "preforum" },
   {
     title: "Материалы мониторинга Института, 2023/2026",
@@ -92,12 +106,17 @@ export function initialDemo(): Board {
       kind: q.kind as Poll["kind"],
       source: q.source as Poll["source"],
       max_length: "max" in q ? q.max! : 250,
-      metadata: ("category" in q
-        ? { default_category: q.category }
-        : {}) as Record<string, string>,
+      metadata: {
+        ...("category" in q ? { default_category: q.category } : {}),
+        ...("key" in q ? { aggregate_key: q.key } : {}),
+      } as Record<string, string>,
       status: i === 0 ? "open" : "prepared",
       n: 0,
-      options: [],
+      options: ("labels" in q ? q.labels : []).map((label, j) => ({
+        id: `p${i}o${j}`,
+        label,
+        count: 0,
+      })),
       cards: [],
     })),
   };
@@ -204,4 +223,37 @@ export function exportRows(b: Board) {
       r.resolution,
     ]),
   ];
+}
+
+export function percentage(count: number, n: number) {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(
+    n ? (count / n) * 100 : 0,
+  );
+}
+
+export function normaliseAggregate(data: any, p: Poll) {
+  const item = Array.isArray(data.polls)
+    ? data.polls.find(
+        (x: any) =>
+          (p.metadata?.aggregate_key && x.key === p.metadata.aggregate_key) ||
+          x.title === p.title,
+      )
+    : data;
+  if (!item) throw Error("В файле нет агрегата этого вопроса");
+  const counts = item.categories
+    ? item.categories.map((c: any) => {
+        const o = p.options.find((o) => o.label === c.label);
+        if (!o) throw Error("Неизвестная категория");
+        return { id: o.id, count: c.count };
+      })
+    : item.counts;
+  return {
+    counts,
+    n: item.n,
+    cutoff: item.cutoff || data.cutoff,
+    sample: item.sample || data.sample,
+    preliminary:
+      (item.preliminary ?? data.preliminary) !== false ? "yes" : "no",
+    expected_version: Number(p.metadata?.version || 0),
+  };
 }

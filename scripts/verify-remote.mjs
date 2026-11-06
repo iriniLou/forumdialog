@@ -93,6 +93,34 @@ try {
       .select("id")
       .single(),
   );
+  const aggregate = checked(
+    await root
+      .from("polls")
+      .insert({
+        event_id: eventId,
+        title: "ТЕСТ: агрегат",
+        kind: "single",
+        source: "preforum",
+      })
+      .select("id")
+      .single(),
+  );
+  checked(
+    await root.from("options").insert([
+      {
+        event_id: eventId,
+        poll_id: aggregate.id,
+        label: "Категория А",
+        position: 0,
+      },
+      {
+        event_id: eventId,
+        poll_id: aggregate.id,
+        label: "Категория Б",
+        position: 1,
+      },
+    ]),
+  );
   checked(
     await root
       .from("admin_roles")
@@ -260,6 +288,107 @@ try {
     const chunks = [];
     for await (const c of stream) chunks.push(c);
     assert.equal(Buffer.concat(chunks).subarray(0, 2).toString(), "PK");
+
+    step = "published aggregate update without rebuilding";
+    const agg = operator
+      .locator(".poll-admin")
+      .filter({ hasText: "ТЕСТ: агрегат" });
+    for (const [a, n] of [
+      [2, 5],
+      [3, 6],
+    ]) {
+      await agg
+        .getByRole("button", { name: "Обновить срез", exact: true })
+        .click();
+      const form = operator.locator(".aggregate-editor");
+      await form.getByLabel("Категория А", { exact: true }).fill(String(a));
+      await form.getByLabel("Категория Б", { exact: true }).fill("3");
+      await form
+        .getByLabel("Число реальных ответов N", { exact: true })
+        .fill(String(n));
+      await form
+        .getByLabel(/Дата и время среза/)
+        .fill("2026-11-13T09:30:00+03:00");
+      await form
+        .getByLabel(/Описание выборки/)
+        .fill("ТЕСТ, без реальных ответов");
+      await form
+        .getByRole("button", { name: "Сохранить срез", exact: true })
+        .click();
+      await operator.waitForFunction(
+        ({ id, n }) => {
+          const el = [...document.querySelectorAll(".poll-admin")].find((x) =>
+            x.textContent.includes("ТЕСТ: агрегат"),
+          );
+          return el?.textContent.includes("N=" + n);
+        },
+        { id: aggregate.id, n },
+      );
+      if (n === 5)
+        await agg
+          .getByRole("button", { name: "Показать итоги", exact: true })
+          .click();
+      await screen.reload();
+      await screen.getByText("N = " + n, { exact: true }).waitFor();
+    }
+    step = "canonical participant and projector URLs";
+    const realParticipant = await context.newPage();
+    await realParticipant.goto(origin + base + "join/" + realCode);
+    await realParticipant.locator("footer").waitFor();
+    assert.equal(await realParticipant.locator(".demo").count(), 0);
+    assert.equal(await realParticipant.getByRole("alert").count(), 0);
+    const realScreen = await context.newPage();
+    await realScreen.goto(origin + base + "screen/" + realCode);
+    await realScreen.locator("footer").waitFor();
+    assert.equal(await realScreen.locator(".demo").count(), 0);
+    step = "real organiser role and current preforum aggregates";
+    const realEvent = checked(
+      await root.from("events").select("id").eq("code", realCode).single(),
+    );
+    const role = checked(
+      await root
+        .from("admin_roles")
+        .select("user_id")
+        .eq("event_id", realEvent.id)
+        .eq("role", "admin")
+        .limit(1)
+        .single(),
+    );
+    const realUser = checked(
+      await root.auth.admin.getUserById(role.user_id),
+    ).user;
+    const link = checked(
+      await root.auth.admin.generateLink({
+        type: "magiclink",
+        email: realUser.email,
+        options: { redirectTo: origin + base + "admin" },
+      }),
+    );
+    const ownerPage = await browser.newPage();
+    await ownerPage.goto(link.properties.action_link);
+    await ownerPage
+      .getByRole("heading", { name: "Очередь модерации" })
+      .waitFor();
+    const realPolls = checked(
+      await root
+        .from("polls")
+        .select("id,imported_n,metadata")
+        .eq("event_id", realEvent.id)
+        .eq("source", "preforum")
+        .eq("kind", "single"),
+    );
+    for (const p of realPolls) {
+      assert.ok(p.imported_n >= 140);
+      const options = checked(
+        await root.from("options").select("imported_count").eq("poll_id", p.id),
+      );
+      assert.equal(
+        options.reduce((a, o) => a + o.imported_count, 0),
+        p.imported_n,
+      );
+    }
+    assert.equal(realPolls.length, 2);
+    await ownerPage.close();
     // Include the browser anonymous identity in cleanup, without ever exposing its token.
     const all = checked(
       await root
@@ -286,6 +415,8 @@ try {
             "projector hide",
             "xlsx export",
             "360px layout",
+            "aggregate update without redeployment",
+            "canonical real event routes and organiser login",
           ],
         },
         null,
@@ -338,6 +469,9 @@ try {
   );
   console.log(
     `PASS ${phase}: ${count} remote responses and moderation verified`,
+  );
+  console.log(
+    `::notice title=Remote verification ${phase}::Accepted ${count}/${count}; p95 ${Math.round(latencies[Math.floor(latencies.length * 0.95)])} ms; synthetic requests from one GitHub runner.`,
   );
 } catch {
   console.error(

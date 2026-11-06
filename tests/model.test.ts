@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { initialDemo, csv, parseAggregates, report } from "../src/model.ts";
+import {
+  initialDemo,
+  csv,
+  parseAggregates,
+  report,
+  normaliseAggregate,
+  percentage,
+} from "../src/model.ts";
 test("forum has a short phone question and anonymous question box, six oral prompts and no fabricated answers", () => {
   const b = initialDemo();
   assert.equal(b.polls.filter((p) => p.source === "live").length, 2);
@@ -45,4 +52,28 @@ test("memo keeps source, time and expert status", () => {
     },
   ];
   assert.match(report(b), /oral.*2026-11-13.*решено/);
+});
+
+test("provided real snapshot sums to 140 for both questions and never populates demo counts", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { validateSnapshot } = await import(
+    "../scripts/preforum-bootstrap.mjs"
+  );
+  const snapshot = validateSnapshot(
+    JSON.parse(readFileSync("data/preforum-2026-11-06.json", "utf8")),
+  );
+  const b = initialDemo();
+  for (const item of snapshot.polls) {
+    assert.equal(item.n, 140);
+    const poll = b.polls.find((p) => p.metadata?.aggregate_key === item.key)!;
+    const data = normaliseAggregate(snapshot, poll);
+    assert.equal(data.n, 140);
+    assert.equal(
+      data.counts.reduce((a, c) => a + c.count, 0),
+      140,
+    );
+    assert.ok(poll.options.every((o) => o.count === 0));
+    assert.equal(data.preliminary, "yes");
+  }
+  assert.equal(percentage(61, 140), "43,6");
 });

@@ -1,19 +1,30 @@
--- Run once after migration; no fabricated responses.
-do $$ declare e uuid; begin
+-- Run once after migrations. Questions/categories only; real aggregates are loaded separately.
+do $$ declare e uuid;p uuid;begin
 insert into public.events(title,date) values ('Живой разговор · Вместе о важном','2026-11-13') returning id into e;
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Так что же для вас «Разговоры о важном»?','text','live',80,0,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Что изменилось в «Разговорах о важном» в 2026/2027 учебном году?','text','oral',250,1,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Какие темы уже провели? Что удалось? Где было трудно?','text','oral',250,2,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Почему не хватает времени? Что в сценарии помогает подготовке?','text','oral',250,3,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Видео показано, но дети не говорили. Что изменить?','text','oral',250,4,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Подросток: «Это всё красивые слова». Какую первую фразу скажете?','text','oral',250,5,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Как продолжаете разговор после звонка?','text','oral',250,6,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Чего не хватает','single','preforum',250,7,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Подготовка к занятию','single','preforum',250,8,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Вопрос экспертам','text','preforum',300,9,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Материалы мониторинга Института, 2023/2026','text','institute',250,10,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Темы и подходы','text','slide',250,11,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Фрагмент сценария','text','slide',250,12,'{}'::jsonb);
-insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Какой вопрос или проблему из педагогической практики вы хотели бы обсудить?','text','live',250,13,'{"default_category":"вопрос"}'::jsonb);
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Так что же для вас «Разговоры о важном»?','text','live',80,0,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Что изменилось в «Разговорах о важном» в 2026/2027 учебном году?','text','oral',250,1,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Какие темы уже провели? Что удалось? Где было трудно?','text','oral',250,2,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Почему не хватает времени? Что в сценарии помогает подготовке?','text','oral',250,3,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Видео показано, но дети не говорили. Что изменить?','text','oral',250,4,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Подросток: «Это всё красивые слова». Какую первую фразу скажете?','text','oral',250,5,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Как продолжаете разговор после звонка?','text','oral',250,6,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Чего не хватает','single','preforum',250,7,'{"aggregate_key":"missing"}'::jsonb) returning id into p;
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Свежего подхода',0);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Времени и сил',1);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Участия ребят',2);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Уверенности в разговорах',3);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Поддержки коллег',4);
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Как готовились','single','preforum',250,8,'{"aggregate_key":"preparation"}'::jsonb) returning id into p;
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Заранее изучили и адаптировали',0);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Заранее изучили, практически без изменений',1);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Ознакомились в день занятия',2);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Собственный вариант',3);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Лично не проводят',4);
+insert into public.options(event_id,poll_id,label,position) values(e,p,'Непосредственно перед занятием или во время него',5);
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Вопрос экспертам','text','preforum',300,9,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Материалы мониторинга Института, 2023/2026','text','institute',250,10,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Темы и подходы','text','slide',250,11,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Фрагмент сценария','text','slide',250,12,'{}'::jsonb) returning id into p;
+insert into public.polls(event_id,title,kind,source,max_length,position,metadata) values(e,'Какой вопрос или проблему из педагогической практики вы хотели бы обсудить?','text','live',250,13,'{"default_category":"вопрос"}'::jsonb) returning id into p;
 end $$;
 select id,code,title from public.events;

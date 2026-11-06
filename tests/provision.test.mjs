@@ -11,12 +11,16 @@ function setup({
   owners = 1,
   orgCount = 1,
   plan = "free",
+  namedOrg = false,
 } = {}) {
   const calls = [],
     outputs = [];
   let seeded = existing,
     invites = 0;
-  const org = { slug: "owned-org", name: "User selected organisation" };
+  const org = {
+    slug: "owned-org",
+    name: namedOrg ? "Вместе о важном" : "User selected organisation",
+  };
   const project = {
     ref: "abcdefghijklmnopqrst",
     name: "forumdialog-123",
@@ -34,6 +38,7 @@ function setup({
       return Array.from({ length: orgCount }, (_, i) => ({
         ...org,
         slug: org.slug + i,
+        name: i > 0 ? "Other organisation" : org.name,
       })).map((o, i) => (i === 0 ? org : o));
     }
     if (path === "/organizations/owned-org") return { ...org, plan };
@@ -128,7 +133,7 @@ test("scoped provision creates project in selected organisation, seeds and invit
   ).body;
   assert.match(auth.uri_allow_list, /existing.example/);
   assert.match(auth.uri_allow_list, /forumdialog\/admin/);
-  assert.equal(auth.rate_limit_anonymous_users, 500);
+  assert.equal(auth.rate_limit_anonymous_users, 1000);
   assert.ok(t.outputs.some(([kind]) => kind === "mask"));
 });
 test("repeat provision reuses project, event and organiser without reseeding", async () => {
@@ -209,4 +214,15 @@ test("management permission denial has a status and safe classification", async 
       e.message.includes("Отказ по правам доступа") &&
       !e.message.includes("private-token"),
   );
+});
+
+test("account-wide token only uses the explicitly named forum organisation", async () => {
+  const t = setup({ orgCount: 2, namedOrg: true });
+  await t.run();
+  assert.equal(
+    t.calls.find((c) => c.path === "/projects" && c.method === "POST").body
+      .organization_slug,
+    "owned-org",
+  );
+  assert.ok(!t.calls.some((c) => c.path.includes("owned-org1")));
 });

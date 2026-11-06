@@ -32,7 +32,7 @@ jobs:
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           fi
           live=$(curl -fsS "https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/build.json" | jq -r '.commit' || true)
-          verified=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=forum-links-and-qr" --jq ".artifacts[] | select(.workflow_run.head_sha == \"$GITHUB_SHA\" and .expired == false) | .id" || true)
+          verified=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=forum-links-and-qr" --jq ".artifacts[] | select(.name == \"forum-links-and-qr\" and .workflow_run.head_sha == \"$GITHUB_SHA\" and .expired == false) | .id" || true)
           if [[ "$GITHUB_EVENT_NAME" = schedule && "$(date -u +%F)" > '2026-11-13' ]]; then
             echo 'changed=false' >> "$GITHUB_OUTPUT"
           elif [ "$live" = "$GITHUB_SHA" ] && [ -n "$verified" ] && [ "$GITHUB_EVENT_NAME" = schedule ]; then
@@ -45,8 +45,8 @@ jobs:
     if: needs.activation.outputs.changed == 'true' && (github.event_name != 'schedule' || needs.activation.outputs.enabled == 'true')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -67,8 +67,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -87,9 +87,17 @@ jobs:
         run: node scripts/check-bundle.mjs
       - name: Public build marker
         run: node -e "require('fs').writeFileSync('dist/build.json',JSON.stringify({commit:process.env.GITHUB_SHA,backend_configured:true}))"
+      - name: Confirm initial Pages activation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh api "repos/$GITHUB_REPOSITORY/pages" >/dev/null; then
+            echo "::error title=GitHub Pages activation required::Open https://github.com/$GITHUB_REPOSITORY/settings/pages and select Build and deployment - Source - GitHub Actions. Initial activation requires repository owner rights; the workflow intentionally does not request administration access."
+            exit 1
+          fi
       - uses: actions/configure-pages@v5
         with:
-          enablement: true
+          enablement: false
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -108,3 +116,11 @@ jobs:
           retention-days: 30
       - name: Links for organiser
         run: cat deployment-evidence/links.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve non-secret verification results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forum-diagnostics
+          path: deployment-evidence/
+          if-no-files-found: ignore
+          retention-days: 7

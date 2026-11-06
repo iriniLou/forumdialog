@@ -181,4 +181,22 @@ test("preforum waiting, verified aggregate import, precise N and CSV export", as
   const sheet = workbook.getWorksheet("Итоги сессии")!;
   expect(sheet.getRow(1).getCell(1).value).toBe("event_id");
   expect(sheet.getRow(2).getCell(3).value).toBe("preforum");
+  await poll
+    .getByRole("button", { name: "Обновить срез", exact: true })
+    .click();
+  const form = page.locator(".aggregate-editor");
+  await form.getByLabel("Первая категория", { exact: true }).fill("3");
+  await form.getByLabel("Число реальных ответов N", { exact: true }).fill("6");
+  await form.getByLabel(/Дата и время среза/).fill("2026-11-13T09:30:00+03:00");
+  await form
+    .getByLabel(/Описание выборки/)
+    .fill("Новый тестовый срез, без реальных данных");
+  await form
+    .getByRole("button", { name: "Сохранить срез", exact: true })
+    .click();
+  await expect(poll).toContainText("N=6");
+  await screen.reload();
+  await expect(screen.getByText("N = 6", { exact: true })).toBeVisible();
+  await expect(screen.getByText("50%", { exact: true })).toHaveCount(2);
+  await expect(screen.getByText(/Предварительные результаты/)).toBeVisible();
 });

@@ -2,6 +2,7 @@ import { readFileSync, appendFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { pathToFileURL } from "node:url";
+import { buildSnapshotImportSql } from "./preforum-bootstrap.mjs";
 const quote = (v) => "'" + String(v).replaceAll("'", "''") + "'";
 export async function provision({
   api,
@@ -17,11 +18,14 @@ export async function provision({
   const orgs = await api("/organizations");
   // A scoped token must expose exactly the organisation selected by its owner.
   // Never ask for account-wide permission to create another organisation.
-  if (orgs.length !== 1)
+  const namedOrgs = orgs.filter(
+    (o) => o.name?.normalize("NFC").trim() === "Вместе о важном",
+  );
+  if (namedOrgs.length !== 1 && orgs.length !== 1)
     throw Error(
       "При создании токена выберите доступ только к одной организации Supabase",
     );
-  const org = orgs[0];
+  const org = namedOrgs.length === 1 ? namedOrgs[0] : orgs[0];
   const slug = org.slug || org.id;
   const projects = await api("/projects");
   const matches = projects.filter(
@@ -93,6 +97,15 @@ export async function provision({
         "\ncommit;",
     );
   }
+  const aggregateUpgrade = await sql(
+    "select to_regclass('public.aggregate_imports') is not null as present",
+  );
+  if (!aggregateUpgrade[0]?.present)
+    await sql(
+      "begin;\n" +
+        readFileSync("supabase/migrations/002_aggregate_updates.sql", "utf8") +
+        "\ncommit;",
+    );
   let events = await sql(
     "select id,code from public.events where title='Живой разговор · Вместе о важном' and date='2026-11-13' and status='active'",
   );
@@ -124,7 +137,7 @@ export async function provision({
     external_email_enabled: true,
     disable_signup: false,
     rate_limit_anonymous_users: Math.max(
-      400,
+      1000,
       cfg.rate_limit_anonymous_users || 0,
     ),
   });
@@ -159,8 +172,12 @@ export async function provision({
   await sql(
     `insert into public.admin_roles(user_id,event_id,role) values (${quote(owner.id)},${quote(event.id)},'admin') on conflict(user_id,event_id) do update set role='admin'`,
   );
+  await sql(buildSnapshotImportSql(event.id, owner.id));
   output("public", { url, anon, ref, code: event.code, origin, base });
   output("service", service);
+  progress(
+    `::notice title=Shared database ready::Project ${ref}; forum code ${event.code}; real preliminary aggregates loaded only if no newer slice exists.`,
+  );
   progress(
     "Общая база и защищённая роль настроены. Приглашение направлено владельцу организации",
   );

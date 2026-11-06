@@ -33,6 +33,7 @@ export async function board(code: string, admin = false): Promise<Board> {
     if (!admin) {
       delete b.responses;
       delete b.audit;
+      delete b.imports;
       delete b.role;
       if (b.status !== "active") b.hidden = true;
       b.polls = b.hidden
@@ -186,13 +187,7 @@ export async function action(
       break;
     }
     case "import":
-      if (
-        !p ||
-        p.source !== "preforum" ||
-        p.kind !== "single" ||
-        p.imported_n ||
-        p.n
-      )
+      if (!p || p.source !== "preforum" || p.kind !== "single")
         throw Error("Импорт только в пустой вопрос предварительной анкеты");
       {
         const counts = payload.counts as { id: string; count: number }[];
@@ -214,11 +209,32 @@ export async function action(
           throw Error(
             "Проверьте категории, источник и сумму: она должна совпадать с N",
           );
+        if (
+          Number(payload.expected_version || 0) !==
+          Number(p.metadata?.version || 0)
+        )
+          throw Error(
+            "Срез уже обновлён другим организатором. Обновите страницу",
+          );
+        b.imports ??= [];
+        b.imports.push({
+          poll_id: p.id,
+          before_data: {
+            n: p.imported_n,
+            metadata: p.metadata,
+            counts: structuredClone(p.options),
+          },
+          after_data: payload,
+          created_at: new Date().toISOString(),
+        });
         for (const c of counts)
           p.options.find((o) => o.id === c.id)!.count = c.count;
         p.n = Number(payload.n);
         p.imported_n = p.n;
         p.metadata = {
+          ...p.metadata,
+          version: String(Number(p.metadata?.version || 0) + 1),
+          preliminary: String(payload.preliminary || "yes"),
           cutoff: String(payload.cutoff),
           sample: String(payload.sample),
         };

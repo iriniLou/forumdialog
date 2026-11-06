@@ -2,11 +2,15 @@ import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { buildSnapshotImportSql } from "./preforum-bootstrap.mjs";
 const db = new PGlite();
 await db.exec(
-  `create schema auth; create table auth.users(id uuid primary key); create role anon;create role authenticated;create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema public,auth to anon,authenticated;grant execute on function auth.uid() to anon,authenticated;`,
+  `create schema auth; create table auth.users(id uuid primary key); create role anon;create role authenticated;create role service_role bypassrls;create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema public,auth to anon,authenticated;grant execute on function auth.uid() to anon,authenticated;`,
 );
 await db.exec(readFileSync("supabase/migrations/001_board.sql", "utf8"));
+await db.exec(
+  readFileSync("supabase/migrations/002_aggregate_updates.sql", "utf8"),
+);
 const admin = randomUUID(),
   operator = randomUUID(),
   moderator = randomUUID();
@@ -258,6 +262,16 @@ await pass(
         ]),
       ),
     );
+    for (const invalid of [
+      { ...payload, n: null },
+      { ...payload, cutoff: " " },
+      { ...payload, sample: null },
+    ])
+      await as(admin, () =>
+        assert.rejects(
+          db.query(`select manage_event('TEST','import',$1)`, [invalid]),
+        ),
+      );
     await as(admin, () =>
       db.query(`select manage_event('TEST','import',$1)`, [payload]),
     );
@@ -285,6 +299,117 @@ await pass(
         { id: pid, status: "open" },
       ]),
     );
+  },
+);
+
+await pass(
+  "real preforum seed is 140, can update online, keeps history and bootstrap cannot overwrite later data",
+  async () => {
+    const e = (
+      await db.query(
+        "select id,code from events where title='Живой разговор · Вместе о важном'",
+      )
+    ).rows[0];
+    await db.query("insert into admin_roles values($1,$2,'admin')", [
+      admin,
+      e.id,
+    ]);
+    await db.query(
+      "update polls set title='Подготовка к занятию' where event_id=$1 and metadata->>'aggregate_key'='preparation'",
+      [e.id],
+    );
+    await db.exec(buildSnapshotImportSql(e.id, admin));
+    let board = (
+      await as(admin, () => db.query("select admin_board($1) b", [e.code]))
+    ).rows[0].b;
+    const missing = board.polls.find(
+        (p) => p.metadata.aggregate_key === "missing",
+      ),
+      preparation = board.polls.find(
+        (p) => p.metadata.aggregate_key === "preparation",
+      );
+    assert.equal(missing.n, 140);
+    assert.equal(preparation.title, "Как готовились");
+    assert.deepEqual(
+      missing.options.map((o) => o.count),
+      [61, 50, 16, 7, 6],
+    );
+    assert.deepEqual(
+      preparation.options.map((o) => o.count),
+      [85, 28, 15, 5, 4, 3],
+    );
+    assert.equal(board.imports.length, 2);
+    assert.equal(board.imports[0].actor, undefined);
+    const payload = {
+      id: missing.id,
+      n: 141,
+      cutoff: "2026-11-13T09:00:00+03:00",
+      sample: "Новый подтверждённый срез без тестов",
+      preliminary: "yes",
+      expected_version: 1,
+      counts: missing.options.map((o, i) => ({
+        id: o.id,
+        count: o.count + (i === 0 ? 1 : 0),
+      })),
+    };
+    await as(admin, () =>
+      db.query("select manage_event($1,'import',$2)", [e.code, payload]),
+    );
+    await db.exec(buildSnapshotImportSql(e.id, admin));
+    board = (
+      await as(admin, () => db.query("select admin_board($1) b", [e.code]))
+    ).rows[0].b;
+    const updated = board.polls.find((p) => p.id === missing.id);
+    assert.equal(updated.n, 141);
+    assert.equal(updated.options[0].count, 62);
+    assert.equal(updated.metadata.version, 2);
+    assert.equal(updated.metadata.aggregate_key, "missing");
+    assert.equal(board.imports.length, 3);
+    await as(admin, () =>
+      assert.rejects(
+        db.query("select manage_event($1,'import',$2)", [e.code, payload]),
+      ),
+    );
+    await as(moderator, () =>
+      assert.rejects(
+        db.query("select manage_event('TEST','import',$1)", [payload]),
+      ),
+    );
+    for (const user of [null, admin])
+      await as(user, () =>
+        assert.rejects(db.query("select * from aggregate_imports")),
+      );
+  },
+);
+
+await pass(
+  "admin can create a new scenario with editable preforum categories",
+  async () => {
+    const { questions } = await import("../src/model.ts");
+    const code = (
+      await as(admin, () =>
+        db.query("select create_event($1,$2,$3) code", [
+          "Новый сценарий",
+          "2026-11-13",
+          questions,
+        ]),
+      )
+    ).rows[0].code;
+    const b = (
+      await as(admin, () => db.query("select admin_board($1) b", [code]))
+    ).rows[0].b;
+    assert.equal(b.polls.length, 14);
+    assert.equal(
+      b.polls.find((p) => p.metadata.aggregate_key === "missing").options
+        .length,
+      5,
+    );
+    assert.equal(
+      b.polls.find((p) => p.metadata.aggregate_key === "preparation").options
+        .length,
+      6,
+    );
+    assert.ok(b.polls.every((p) => p.n === 0));
   },
 );
 const latencies = [],
