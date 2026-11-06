@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-06",
+  "source_run": "https://github.com/iriniLou/forumdialog/actions/runs/42258397652",
+  "source_commit": "369f26d",
+  "database": {
+    "provider": "Supabase",
+    "project_ref": "cxcwvrtqjifkveulgtpv",
+    "event_code": "225c84389d03",
+    "provisioning": "passed",
+    "preliminary_snapshot": "provided by organiser; loaded on initial setup; later administrator versions are preserved"
+  },
+  "live_backend_test": {
+    "sent": 350,
+    "accepted": 350,
+    "submission_schedule_ms": 25000,
+    "p95_submission_ms": 222,
+    "private_table_access_denied": true,
+    "moderation_and_hide": "passed",
+    "duplicate_submission": "passed",
+    "emergency_close": "passed",
+    "synthetic_test_event_and_users_removed": true,
+    "limitations": "Synthetic HTTPS requests from one GitHub runner. Real venue Wi-Fi and physical phones were not tested."
+  },
+  "website": {
+    "status": "blocked",
+    "reason": "Initial GitHub Pages activation requires repository owner settings; workflow intentionally does not request administration permissions.",
+    "owner_setting": "https://github.com/iriniLou/forumdialog/settings/pages",
+    "required_source": "GitHub Actions",
+    "public_interfaces_verified": false,
+    "qr_generated": false
+  }
+}
