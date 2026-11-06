@@ -19,7 +19,7 @@
     "duplicate_submission": "passed",
     "emergency_close": "passed",
     "synthetic_test_event_and_users_removed": true,
-    "limitations": "Synthetic HTTPS requests from one GitHub runner. Real venue Wi-Fi and physical phones were not tested."
+    "limitations": "Synthetic HTTPS requests from one GitHub runner. Anonymous identities were created before the timed submission burst. Real venue Wi-Fi, physical phones and a simultaneous Auth signup surge were not tested."
   },
   "website": {
     "status": "blocked",

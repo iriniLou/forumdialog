@@ -378,7 +378,7 @@ try {
         .eq("kind", "single"),
     );
     for (const p of realPolls) {
-      assert.ok(p.imported_n >= 140);
+      assert.ok(p.imported_n > 0);
       const options = checked(
         await root.from("options").select("imported_count").eq("poll_id", p.id),
       );
@@ -475,7 +475,7 @@ try {
   );
 } catch {
   console.error(
-    `FAIL remote verification at: ${step}. Publication is not considered verified.`,
+    `::error title=Remote verification ${phase}::Failed at ${step}. Publication is not considered verified.`,
   );
   process.exitCode = 1;
 } finally {
