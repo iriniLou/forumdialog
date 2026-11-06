@@ -15,13 +15,13 @@ export async function provision({
 }) {
   const orgName = `forumdialog-${repoId}`;
   const orgs = await api("/organizations");
-  const matchingOrgs = orgs.filter((o) => o.name === orgName);
-  if (matchingOrgs.length > 1)
+  // A scoped token must expose exactly the organisation selected by its owner.
+  // Never ask for account-wide permission to create another organisation.
+  if (orgs.length !== 1)
     throw Error(
-      "Найдены организации с одинаковым именем; нужен однозначный выбор",
+      "При создании токена выберите доступ только к одной организации Supabase",
     );
-  let org = matchingOrgs[0];
-  if (!org) org = await api("/organizations", "POST", { name: orgName });
+  const org = orgs[0];
   const slug = org.slug || org.id;
   const projects = await api("/projects");
   const matches = projects.filter(
@@ -31,13 +31,19 @@ export async function provision({
   if (matches.length > 1)
     throw Error("Найдены проекты с одинаковым именем; нужен однозначный выбор");
   let project = matches[0];
-  if (!project)
+  if (!project) {
+    const details = await api(`/organizations/${slug}`);
+    if (details.plan !== "free")
+      throw Error(
+        "Создание проекта остановлено: бесплатный тариф выбранной организации не подтверждён. Платные ресурсы автоматически не создаются",
+      );
     project = await api("/projects", "POST", {
       name: orgName,
       organization_slug: slug,
       db_pass: randomBytes(32).toString("base64url"),
       region_selection: { type: "smartGroup", code: "emea" },
     });
+  }
   const ref = project.ref || project.id;
   if (!/^[a-z]{20}$/.test(ref))
     throw Error("Некорректный идентификатор проекта");

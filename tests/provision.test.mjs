@@ -1,12 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provision, managementApi } from "../scripts/provision.mjs";
-function setup({ existing = false, otherEvent = false, owners = 1 } = {}) {
+function setup({
+  existing = false,
+  otherEvent = false,
+  owners = 1,
+  orgCount = 1,
+  plan = "free",
+} = {}) {
   const calls = [],
     outputs = [];
   let seeded = existing,
     invites = 0;
-  const org = { slug: "owned-org", name: "forumdialog-123" };
+  const org = { slug: "owned-org", name: "User selected organisation" };
   const project = {
     ref: "abcdefghijklmnopqrst",
     name: "forumdialog-123",
@@ -15,8 +21,18 @@ function setup({ existing = false, otherEvent = false, owners = 1 } = {}) {
   };
   const api = async (path, method = "GET", body) => {
     calls.push({ path, method, body });
-    if (path === "/organizations")
-      return method === "POST" ? org : existing ? [org] : [];
+    if (path === "/organizations") {
+      assert.equal(
+        method,
+        "GET",
+        "Automation must never create an organisation",
+      );
+      return Array.from({ length: orgCount }, (_, i) => ({
+        ...org,
+        slug: org.slug + i,
+      })).map((o, i) => (i === 0 ? org : o));
+    }
+    if (path === "/organizations/owned-org") return { ...org, plan };
     if (path === "/projects")
       return method === "POST" ? project : existing ? [project] : [];
     if (path.endsWith("/api-keys?reveal=true"))
@@ -94,7 +110,7 @@ function setup({ existing = false, otherEvent = false, owners = 1 } = {}) {
     invites: () => invites,
   };
 }
-test("fresh provision creates dedicated organisation, seeds, preserves redirects and invites owner", async () => {
+test("scoped provision creates project in selected organisation, seeds and invites owner", async () => {
   const t = setup();
   const r = await t.run();
   assert.equal(r.code, "examplecode");
@@ -146,4 +162,19 @@ test("failed management response cannot leak response body or token", async () =
       !e.message.includes("private-token") &&
       !e.message.includes("do-not-print"),
   );
+});
+
+test("token covering multiple organisations cannot pick one silently", async () => {
+  const t = setup({ orgCount: 2 });
+  await assert.rejects(t.run(), /только к одной организации/);
+  assert.ok(!t.calls.some((c) => c.method === "POST"));
+});
+test("paid or unknown plan cannot create a billable project", async () => {
+  for (const plan of ["pro", undefined, null]) {
+    const t = setup({ plan: plan === undefined ? "unknown" : plan });
+    await assert.rejects(t.run(), /бесплатный тариф/);
+    assert.ok(
+      !t.calls.some((c) => c.path === "/projects" && c.method === "POST"),
+    );
+  }
 });
