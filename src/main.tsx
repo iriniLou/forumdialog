@@ -15,6 +15,7 @@ import {
   type ResponseRow,
 } from "./model";
 import "./style.css";
+import rovLogo from "./assets/rov-logo.png";
 import { appPath, base, defaultCode, routeParts } from "./routes";
 import { exportXlsx } from "./xlsx";
 const parts = routeParts,
@@ -293,6 +294,7 @@ function App() {
             ) : (
               <>
                 <div className="session">
+                  {mode === "screen" && <RovLogo />}
                   <span>ВМЕСТЕ О ВАЖНОМ / МЕТОДИЧЕСКАЯ СЕССИЯ</span>
                   {mode === "screen" && (
                     <button
@@ -308,7 +310,7 @@ function App() {
                 {b.hidden || !poll ? (
                   <section className="waiting">
                     <span className="eyebrow">
-                      Место для утверждённого логотипа
+                      Всероссийский форум «Вместе о важном»
                     </span>
                     <h1>
                       Живой
@@ -379,11 +381,23 @@ function App() {
     </>
   );
 }
+function RovLogo() {
+  return (
+    <img
+      className="rov-logo"
+      src={rovLogo}
+      alt="Разговоры о важном"
+      width={1396}
+      height={496}
+    />
+  );
+}
 function Header() {
   return (
     <header>
       <a className="brand" href={appPath("/")}>
-        <span className="brand-icon">↗</span>Живой разговор
+        <RovLogo />
+        <span>Живой разговор</span>
       </a>
       <a href={appPath("/help")}>Как это работает ↗</a>
     </header>
