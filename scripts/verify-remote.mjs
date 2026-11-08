@@ -49,6 +49,40 @@ async function pool(items, fn, parallel = 5) {
   );
 }
 try {
+  if (phase === "public") {
+    step = "wait for the current published build";
+    const markerUrl = new URL("build.json", origin + base);
+    markerUrl.searchParams.set(
+      "v",
+      process.env.GITHUB_SHA || String(Date.now()),
+    );
+    const deadline = Date.now() + 120000;
+    let current = false;
+    while (Date.now() < deadline) {
+      try {
+        const response = await fetch(markerUrl, {
+          headers: { "Cache-Control": "no-cache" },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (response.ok) {
+          const marker = await response.json();
+          if (
+            marker.backend_configured === true &&
+            (!process.env.GITHUB_SHA ||
+              marker.commit === process.env.GITHUB_SHA)
+          ) {
+            current = true;
+            break;
+          }
+        }
+      } catch {}
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    assert.ok(
+      current,
+      "The deployment marker must match the code being verified",
+    );
+  }
   step = "create isolated test data";
   const user = checked(
     await root.auth.admin.createUser({ email, password, email_confirm: true }),
@@ -252,31 +286,82 @@ try {
     await command("moderate", { ...payload, status: "hidden" });
     await screen.reload();
     assert.equal(await screen.getByText(r.text, { exact: true }).count(), 0);
-    step = "oral entry and moderation via published admin";
-    const capture = operator
-      .locator("form")
-      .filter({ hasText: "Фиксация ответов из зала" });
+    step = "oral entry: submit from published admin";
+    // Delay the response after the real DB commit to exercise a slow connection.
+    // Positional .last() locators could otherwise approve the previous live answer.
+    await operator.route("**/rest/v1/rpc/manage_event", async (route) => {
+      const req = route.request();
+      if (req.method() === "POST" && req.postDataJSON()?.p_op === "oral") {
+        const response = await route.fetch();
+        await new Promise((r) => setTimeout(r, 400));
+        await route.fulfill({ response });
+      } else await route.continue();
+    });
+    const oralText = "ТЕСТ: реальная проверка ручного ввода";
+    const capture = operator.getByTestId("oral-capture");
     await capture.locator("select").selectOption(oral.id);
+    await capture.locator("textarea").fill(oralText);
+    const submitted = operator.waitForResponse((response) => {
+      if (
+        !response.url().endsWith("/rest/v1/rpc/manage_event") ||
+        response.request().method() !== "POST"
+      )
+        return false;
+      return response.request().postDataJSON()?.p_op === "oral";
+    });
     await capture
-      .locator("textarea")
-      .fill("ТЕСТ: реальная проверка ручного ввода");
-    await capture.getByRole("button", { name: "В очередь модерации" }).click();
-    await operator.locator("article textarea").last().waitFor();
-    await operator
-      .locator("article")
-      .filter({ has: operator.locator("textarea") })
-      .last()
+      .getByRole("button", { name: "В очередь модерации", exact: true })
+      .click();
+    assert.equal((await submitted).status(), 200);
+    async function waitForAdminRow(predicate) {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const board = checked(await admin.rpc("admin_board", { p_code: code }));
+        const row = board.responses.find(predicate);
+        if (row) return row;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw Error(
+        "Expected test response did not reach the requested moderation state",
+      );
+    }
+    step = "oral entry: wait for the newly queued response";
+    const queued = await waitForAdminRow(
+      (row) => row.poll_id === oral.id && row.text === oralText,
+    );
+    assert.equal(queued.status, "pending");
+    const oralRow = operator.getByTestId("response-" + queued.id);
+    await oralRow.locator("textarea").waitFor();
+    assert.equal(await oralRow.locator("textarea").inputValue(), oralText);
+    assert.ok(!JSON.stringify(await snapshot()).includes(oralText));
+    step = "oral entry: approve that exact response";
+    await oralRow
       .getByRole("button", { name: "Одобрить", exact: true })
       .click();
+    await waitForAdminRow(
+      (row) => row.id === queued.id && row.status === "approved",
+    );
+    step = "oral entry: show the selected question on projector";
     await operator
-      .locator(".poll-admin")
-      .filter({ hasText: "ТЕСТ: ответы из зала" })
+      .getByTestId("poll-" + oral.id)
       .getByRole("button", { name: "Показать итоги", exact: true })
       .click();
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const current = await snapshot();
+      if (
+        current.polls.some(
+          (p) =>
+            p.id === oral.id &&
+            p.status === "results" &&
+            p.cards.some((c) => c.id === queued.id),
+        )
+      )
+        break;
+      if (attempt === 99)
+        throw Error("Approved oral response was not published");
+      await new Promise((r) => setTimeout(r, 100));
+    }
     await screen.reload();
-    await screen
-      .getByText("ТЕСТ: реальная проверка ручного ввода", { exact: true })
-      .waitFor();
+    await screen.getByText(oralText, { exact: true }).waitFor();
     assert.equal(await screen.getByText(/N =/).count(), 0);
     step = "published XLSX export";
     const pending = operator.waitForEvent("download");

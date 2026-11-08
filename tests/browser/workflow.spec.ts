@@ -61,9 +61,7 @@ test("two participants, moderation, oral entry, hide and mobile layout", async (
   await expect(
     screen.getByText("ДЕМО: возможность услышать друг друга"),
   ).toHaveCount(0);
-  const capture = admin
-    .locator("form")
-    .filter({ hasText: "Фиксация ответов из зала" });
+  const capture = admin.getByTestId("oral-capture");
   await capture
     .locator("textarea")
     .fill("ДЕМО: дать ученикам время на разговор");
@@ -71,12 +69,19 @@ test("two participants, moderation, oral entry, hide and mobile layout", async (
   await expect(admin.locator("article textarea").last()).toHaveValue(
     "ДЕМО: дать ученикам время на разговор",
   );
-  await admin
-    .locator("article")
-    .filter({ has: admin.locator("textarea") })
-    .last()
-    .getByRole("button", { name: "Одобрить", exact: true })
-    .click();
+  const oralResponseId = await admin.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem("forumdialog.demo.v1")!).responses.find(
+        (r: any) => r.text === "ДЕМО: дать ученикам время на разговор",
+      ).id,
+  );
+  const oralRow = admin.getByTestId("response-" + oralResponseId);
+  await expect(oralRow).toHaveAttribute("data-response-status", "pending");
+  await expect(
+    screen.getByText("ДЕМО: дать ученикам время на разговор"),
+  ).toHaveCount(0);
+  await oralRow.getByRole("button", { name: "Одобрить", exact: true }).click();
+  await expect(oralRow).toHaveAttribute("data-response-status", "approved");
   const oral = admin
     .locator(".poll-admin")
     .filter({ hasText: "Что изменилось" });

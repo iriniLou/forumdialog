@@ -727,7 +727,11 @@ function Admin({
         <span className="muted">/ {b.polls.length} вопросов</span>
       </h2>
       {b.polls.map((p, i) => (
-        <article className="poll-admin card" key={p.id}>
+        <article
+          className="poll-admin card"
+          data-testid={"poll-" + p.id}
+          key={p.id}
+        >
           <div>
             <span className="eyebrow">
               {String(i + 1).padStart(2, "0")} / {p.source} / {p.kind} ·{" "}
@@ -1006,7 +1010,11 @@ function Moderate({
     [tags, setTags] = useState(row.tags),
     [resolution, setResolution] = useState(row.resolution);
   return (
-    <article className="card">
+    <article
+      className="card"
+      data-testid={"response-" + row.id}
+      data-response-status={row.status}
+    >
       <span className="eyebrow">
         {row.status} ·{" "}
         {new Date(row.created_at).toLocaleString("ru-RU", {
@@ -1168,6 +1176,7 @@ function Capture({
   return (
     <form
       className="card"
+      data-testid="oral-capture"
       onSubmit={async (e) => {
         e.preventDefault();
         if (await run("oral", { id, text, category })) setText("");
