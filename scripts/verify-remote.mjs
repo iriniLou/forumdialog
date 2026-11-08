@@ -329,6 +329,7 @@ try {
       (row) => row.poll_id === oral.id && row.text === oralText,
     );
     assert.equal(queued.status, "pending");
+    assert.equal(queued.category, "");
     const oralRow = operator.getByTestId("response-" + queued.id);
     await oralRow.locator("textarea").waitFor();
     assert.equal(await oralRow.locator("textarea").inputValue(), oralText);
@@ -363,6 +364,7 @@ try {
     await screen.reload();
     await screen.getByText(oralText, { exact: true }).waitFor();
     assert.equal(await screen.getByText(/N =/).count(), 0);
+    assert.equal(await screen.locator(".cards .pill").count(), 0);
     step = "published XLSX export";
     const pending = operator.waitForEvent("download");
     await operator

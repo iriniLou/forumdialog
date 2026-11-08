@@ -344,9 +344,6 @@ function App() {
                           : "Итоги разговора"}
                       </span>
                       <h1>{poll.title}</h1>
-                      {poll.source === "live" && (
-                        <p>Один ответ — одна короткая фраза</p>
-                      )}
                       {mode === "screen" &&
                         poll.source === "live" &&
                         joinUrl && <QRCodeSVG value={joinUrl} size={130} />}
@@ -399,7 +396,6 @@ function Header() {
         <RovLogo />
         <span>Живой разговор</span>
       </a>
-      <a href={appPath("/help")}>Как это работает ↗</a>
     </header>
   );
 }
@@ -432,14 +428,9 @@ function Participant({ poll, code }: { poll: Poll; code: string }) {
         }
       }}
     >
-      {poll.source === "oral" && poll.title.includes("Что изменилось") && (
-        <h2>Назвали участники</h2>
-      )}
       {poll.kind === "text" ? (
         <>
-          <label htmlFor="answer">
-            Не указывайте личные данные и сведения о конкретных детях
-          </label>
+          <label htmlFor="answer">Ваш ответ</label>
           <textarea
             id="answer"
             maxLength={poll.max_length}
@@ -448,7 +439,7 @@ function Participant({ poll, code }: { poll: Poll; code: string }) {
             required
           />
           <p className="note">
-            {text.length} / {poll.max_length} · Ответ пройдёт модерацию
+            {text.length} / {poll.max_length}
           </p>
         </>
       ) : (
@@ -517,13 +508,7 @@ function Results({ poll }: { poll: Poll }) {
     );
   return (
     <section>
-      {poll.source === "oral" ? (
-        <p>Ответы участников, записанные во время обсуждения</p>
-      ) : poll.source === "preforum" && !poll.n ? (
-        <p>Ожидаем результаты опроса</p>
-      ) : poll.kind === "text" ? (
-        <p>Короткие фразы · одобрено модератором</p>
-      ) : (
+      {poll.kind !== "text" && (
         <div className="result-meta">
           <strong>N = {poll.n}</strong>
           <span>
@@ -540,28 +525,11 @@ function Results({ poll }: { poll: Poll }) {
           {poll.metadata?.cutoff} · {poll.metadata?.sample}
         </p>
       )}
-      {poll.source === "oral" && poll.title.includes("Что изменилось") && (
-        <h2>Назвали участники</h2>
-      )}
       {poll.kind === "text" ? (
         <div className="cards">
-          {poll.source === "oral" && poll.title.includes("Что удалось") ? (
-            ["практика", "проблема"].map((cat) => (
-              <section key={cat}>
-                <h2>{cat === "практика" ? "Сработало" : "Было трудно"}</h2>
-                {poll.cards
-                  .filter((c) => c.category === cat)
-                  .map((c) => (
-                    <article className="card" key={c.id}>
-                      <p>{c.text}</p>
-                    </article>
-                  ))}
-              </section>
-            ))
-          ) : poll.cards.length ? (
+          {poll.cards.length ? (
             poll.cards.slice(0, 10).map((c) => (
               <article className="card" key={c.id}>
-                <span className="pill">{categoryName(c.category)}</span>
                 <p>{c.text}</p>
               </article>
             ))
@@ -1047,11 +1015,13 @@ function Moderate({
         <label>
           Категория
           <select
+            aria-label="Категория"
             value={category}
             onChange={(e) =>
               setCategory(e.target.value as ResponseRow["category"])
             }
           >
+            <option value="">Без категории</option>
             {["проблема", "практика", "решение", "вопрос", "для памятки"].map(
               (x) => (
                 <option key={x}>{x}</option>
@@ -1166,6 +1136,7 @@ function categoryName(c: string) {
   return (
     (
       {
+        "": "Без категории",
         проблема: "Было трудно / Трудности",
         практика: "Сработало / Работающие практики",
         решение: "Открытия и решения",
@@ -1186,7 +1157,7 @@ function Capture({
       b.polls.find((p) => p.source === "oral")?.id || "",
     ),
     [text, setText] = useState(""),
-    [category, setCategory] = useState("практика");
+    [category, setCategory] = useState("");
   return (
     <form
       className="card"
@@ -1228,7 +1199,7 @@ function Capture({
         />
       </label>
       <div className="toolbar">
-        {["проблема", "практика", "решение", "вопрос"].map((c) => (
+        {["", "проблема", "практика", "решение", "вопрос"].map((c) => (
           <button
             type="button"
             aria-pressed={category === c}

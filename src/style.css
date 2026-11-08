@@ -71,6 +71,7 @@ header {
 }
 .rov-logo {
   display: block;
+  mix-blend-mode: multiply;
   width: 232px;
   max-width: 100%;
   height: auto;
@@ -405,10 +406,6 @@ textarea {
   }
   .brand .rov-logo {
     width: 200px;
-  }
-  header > a:last-child {
-    font-size: 13px;
-    max-width: 90px;
   }
   main {
     padding: 28px 18px;

@@ -62,6 +62,7 @@ function setup({
     if (path.endsWith("/database/query")) {
       const q = body.query;
       if (q.includes("to_regclass")) return [{ present: existing }];
+      if (q.includes("from pg_constraint")) return [{ present: existing }];
       if (q.includes("do $$ declare e uuid")) {
         seeded = true;
         return [];

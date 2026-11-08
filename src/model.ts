@@ -1,6 +1,7 @@
 import preforum from "../data/preforum-2026-11-06.json" with { type: "json" };
 export type Status = "prepared" | "open" | "closed" | "results";
 export type Category =
+  | ""
   | "проблема"
   | "практика"
   | "решение"
@@ -159,11 +160,12 @@ export function parseAggregates(input: string, poll: Poll) {
 export function report(board: Board) {
   return [
     "# " + board.title,
-    ...["проблема", "решение", "практика", "вопрос", "для памятки"].map(
+    ...["", "проблема", "решение", "практика", "вопрос", "для памятки"].map(
       (c) =>
         "\n## " +
         (
           {
+            "": "Без категории",
             проблема: "Трудности",
             практика: "Работающие практики",
             решение: "Решения",

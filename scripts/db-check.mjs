@@ -11,6 +11,9 @@ await db.exec(readFileSync("supabase/migrations/001_board.sql", "utf8"));
 await db.exec(
   readFileSync("supabase/migrations/002_aggregate_updates.sql", "utf8"),
 );
+await db.exec(
+  readFileSync("supabase/migrations/003_optional_categories.sql", "utf8"),
+);
 const admin = randomUUID(),
   operator = randomUUID(),
   moderator = randomUUID();
@@ -107,6 +110,11 @@ await pass(
     ).rows[0].b;
     assert.equal(pub.polls[0].cards.length, 0);
     assert.equal(pub.responses, undefined);
+    assert.ok(
+      (await db.query("select category from open_responses")).rows.every(
+        (r) => r.category === "",
+      ),
+    );
   },
 );
 await pass("80 character boundary enforced server-side", () =>
@@ -125,7 +133,7 @@ const payload = {
   id: response,
   text: "Исправленная фраза",
   status: "approved",
-  category: "решение",
+  category: "",
   tags: "тест",
   resolution: "решено",
 };
@@ -177,7 +185,7 @@ await pass(
     ).rows[0].id;
     await as(operator, () =>
       db.query(`select manage_event('TEST','oral',$1)`, [
-        { id: p, text: "Дать время на обсуждение", category: "практика" },
+        { id: p, text: "Дать время на обсуждение", category: "" },
       ]),
     );
     await as(admin, () =>

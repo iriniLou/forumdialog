@@ -15,6 +15,9 @@ test("two participants, moderation, oral entry, hide and mobile layout", async (
     }),
   ).toBeVisible();
   await expect(a.locator("textarea")).toHaveAttribute("maxlength", "80");
+  await expect(a.getByRole("link", { name: "Как это работает" })).toHaveCount(
+    0,
+  );
   await a.screenshot({
     path: "docs/screenshots/01-participant.png",
     fullPage: true,
@@ -77,6 +80,9 @@ test("two participants, moderation, oral entry, hide and mobile layout", async (
   );
   const oralRow = admin.getByTestId("response-" + oralResponseId);
   await expect(oralRow).toHaveAttribute("data-response-status", "pending");
+  await expect(oralRow.getByLabel("Категория", { exact: true })).toHaveValue(
+    "",
+  );
   await expect(
     screen.getByText("ДЕМО: дать ученикам время на разговор"),
   ).toHaveCount(0);
@@ -94,8 +100,9 @@ test("two participants, moderation, oral entry, hide and mobile layout", async (
   ).toBeVisible();
   await expect(
     screen.getByText("Ответы участников, записанные во время обсуждения"),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(screen.getByText(/N =/)).toHaveCount(0);
+  await expect(screen.locator(".cards .pill")).toHaveCount(0);
   await admin
     .locator(".poll-admin")
     .first()

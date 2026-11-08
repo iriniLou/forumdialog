@@ -45,13 +45,14 @@ test("memo keeps source, time and expert status", () => {
       poll_id: "p1",
       text: "Больше обсуждать",
       status: "approved",
-      category: "решение",
+      category: "",
       tags: "время",
       resolution: "решено",
       created_at: "2026-11-13T07:30:00Z",
     },
   ];
   assert.match(report(b), /oral.*2026-11-13.*решено/);
+  assert.match(report(b), /Без категории\n- .*Больше обсуждать/);
 });
 
 test("provided real snapshot sums to 140 for both questions and never populates demo counts", async () => {

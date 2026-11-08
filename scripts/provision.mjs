@@ -106,6 +106,18 @@ export async function provision({
         readFileSync("supabase/migrations/002_aggregate_updates.sql", "utf8") +
         "\ncommit;",
     );
+  const optionalCategory = await sql(
+    "select exists(select 1 from pg_constraint where conrelid='public.open_responses'::regclass and conname='open_responses_category_optional') as present",
+  );
+  if (!optionalCategory[0]?.present)
+    await sql(
+      "begin;\n" +
+        readFileSync(
+          "supabase/migrations/003_optional_categories.sql",
+          "utf8",
+        ) +
+        "\ncommit;",
+    );
   let events = await sql(
     "select id,code from public.events where title='Живой разговор · Вместе о важном' and date='2026-11-13' and status='active'",
   );

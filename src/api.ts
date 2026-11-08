@@ -87,7 +87,7 @@ export async function vote(
       poll_id: p.id,
       text: text.trim(),
       status: "pending",
-      category: (p.metadata?.default_category || "практика") as Category,
+      category: (p.metadata?.default_category || "") as Category,
       tags: "",
       resolution: "требуется ответ",
       created_at: new Date().toISOString(),
