@@ -1,10 +1,10 @@
-> **Обновление готовности:** доступ Supabase уже предоставлен, проект и общая база созданы, сетевой тест 350 отправок прошёл. Новый токен создавать не требуется. Публикация остановилась на первичном включении GitHub Pages: https://github.com/iriniLou/forumdialog/settings/pages → Build and deployment → Source → GitHub Actions. Это настройка владельца; обычному workflow не выдаются права администратора репозитория. Ниже сохранена инструкция для будущего развёртывания из чистого аккаунта.
+> **Готово:** Supabase и GitHub Pages настроены. Все три опубликованных интерфейса прошли [браузерную проверку](https://github.com/iriniLou/forumdialog/actions/runs/42438477465); QR выдан. Следующие разделы — инструкция для нового аккаунта. Для текущего сайта повторять настройку токенов или Pages не нужно.
 
 # Автоматическая публикация: доступ и реальные ограничения
 
 Исходники: https://github.com/iriniLou/forumdialog . Облачная база и сайт не считаются готовыми, пока workflow не проверит их по сети. Локальная проверка не заменяет этот этап.
 
-Единственное недостающее действие владельца для запуска подготовленной автоматизации — сохранить **Supabase personal access token с доступом к одной организации (Organization)** как GitHub Actions repository secret с именем `SUPABASE_ACCESS_TOKEN`:
+Для развёртывания из чистого аккаунта потребуется сохранить **Supabase personal access token с доступом к одной организации (Organization)** как GitHub Actions repository secret с именем `SUPABASE_ACCESS_TOKEN`:
 
 - Создание токена в своём аккаунте Supabase: https://supabase.com/dashboard/account/tokens . Не отправлять токен в чат.
 - Защищённая форма секрета нужного репозитория: https://github.com/iriniLou/forumdialog/settings/secrets/actions/new . Name: `SUPABASE_ACCESS_TOKEN`, Secret: созданный токен, затем Add secret.

@@ -1,7 +1,7 @@
 {
-  "date": "2026-11-06",
-  "source_run": "https://github.com/iriniLou/forumdialog/actions/runs/42258397652",
-  "source_commit": "369f26d",
+  "date": "2026-11-08",
+  "source_run": "https://github.com/iriniLou/forumdialog/actions/runs/42438477465",
+  "source_commit": "88ec25f",
   "database": {
     "provider": "Supabase",
     "project_ref": "cxcwvrtqjifkveulgtpv",
@@ -13,7 +13,7 @@
     "sent": 350,
     "accepted": 350,
     "submission_schedule_ms": 25000,
-    "p95_submission_ms": 222,
+    "p95_submission_ms": 217,
     "private_table_access_denied": true,
     "moderation_and_hide": "passed",
     "duplicate_submission": "passed",
@@ -22,11 +22,20 @@
     "limitations": "Synthetic HTTPS requests from one GitHub runner. Anonymous identities were created before the timed submission burst. Real venue Wi-Fi, physical phones and a simultaneous Auth signup surge were not tested."
   },
   "website": {
-    "status": "blocked",
-    "reason": "Initial GitHub Pages activation requires repository owner settings; workflow intentionally does not request administration permissions.",
-    "owner_setting": "https://github.com/iriniLou/forumdialog/settings/pages",
-    "required_source": "GitHub Actions",
-    "public_interfaces_verified": false,
-    "qr_generated": false
+    "status": "passed",
+    "public_interfaces_verified": true,
+    "organiser_login": "passed with the actual organiser role",
+    "oral_response_moderation": "passed; exact response identity; 400ms delayed server response",
+    "aggregate_update_without_redeployment": "passed",
+    "csv_and_xlsx_export": "CSV local browser test passed; XLSX published interface test passed",
+    "participant_360px_layout": "passed",
+    "projector_1920x1080": "passed",
+    "participant_url": "https://irinilou.github.io/forumdialog/join/225c84389d03",
+    "moderator_url": "https://irinilou.github.io/forumdialog/admin",
+    "projector_url": "https://irinilou.github.io/forumdialog/screen/225c84389d03",
+    "qr_generated": true,
+    "qr_png": "docs/participant-qr.png",
+    "qr_svg": "docs/participant-qr.svg",
+    "qr_independent_decode": "passed"
   }
 }
