@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { pathToFileURL } from "node:url";
 import { buildSnapshotImportSql } from "./preforum-bootstrap.mjs";
+import { buildSessionSql } from "./session-bootstrap.mjs";
 const quote = (v) => "'" + String(v).replaceAll("'", "''") + "'";
 export async function provision({
   api,
@@ -118,6 +119,15 @@ export async function provision({
         ) +
         "\ncommit;",
     );
+  const sessionUpgrade = await sql(
+    "select to_regprocedure('public.control_stage(text,uuid,text)') is not null as present",
+  );
+  if (!sessionUpgrade[0]?.present)
+    await sql(
+      "begin;\n" +
+        readFileSync("supabase/migrations/004_two_stage_session.sql", "utf8") +
+        "\ncommit;",
+    );
   let events = await sql(
     "select id,code from public.events where title='Живой разговор · Вместе о важном' and date='2026-11-13' and status='active'",
   );
@@ -185,6 +195,7 @@ export async function provision({
     `insert into public.admin_roles(user_id,event_id,role) values (${quote(owner.id)},${quote(event.id)},'admin') on conflict(user_id,event_id) do update set role='admin'`,
   );
   await sql(buildSnapshotImportSql(event.id, owner.id));
+  await sql(buildSessionSql(event.id));
   output("public", { url, anon, ref, code: event.code, origin, base });
   output("service", service);
   progress(

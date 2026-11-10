@@ -1,8 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { initialDemo } from "../../src/model";
 test("two participants, moderation, oral entry, hide and mobile layout", async ({
   browser,
 }) => {
   const context = await browser.newContext();
+  await context.addInitScript((b) => {
+    if (!localStorage.getItem("forumdialog.demo.v1"))
+      localStorage.setItem("forumdialog.demo.v1", JSON.stringify(b));
+  }, initialDemo());
   const a = await context.newPage(),
     b = await context.newPage(),
     admin = await context.newPage(),
@@ -126,6 +131,10 @@ test("two participants, moderation, oral entry, hide and mobile layout", async (
 test("preforum waiting, verified aggregate import, precise N and CSV export", async ({
   page,
 }) => {
+  await page.context().addInitScript((b) => {
+    if (!localStorage.getItem("forumdialog.demo.v1"))
+      localStorage.setItem("forumdialog.demo.v1", JSON.stringify(b));
+  }, initialDemo());
   await page.goto("/admin");
   const poll = page
     .locator(".poll-admin")

@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { buildSnapshotImportSql } from "./preforum-bootstrap.mjs";
+import { buildSessionSql } from "./session-bootstrap.mjs";
 const db = new PGlite();
 await db.exec(
   `create schema auth; create table auth.users(id uuid primary key); create role anon;create role authenticated;create role service_role bypassrls;create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema public,auth to anon,authenticated;grant execute on function auth.uid() to anon,authenticated;`,
@@ -13,6 +14,9 @@ await db.exec(
 );
 await db.exec(
   readFileSync("supabase/migrations/003_optional_categories.sql", "utf8"),
+);
+await db.exec(
+  readFileSync("supabase/migrations/004_two_stage_session.sql", "utf8"),
 );
 const admin = randomUUID(),
   operator = randomUUID(),
@@ -418,6 +422,148 @@ await pass(
       6,
     );
     assert.ok(b.polls.every((p) => p.n === 0));
+  },
+);
+await pass(
+  "two-stage bootstrap retains old data, aggregates all approved phrases and pins only approved final answers",
+  async () => {
+    const e = (
+      await db.query(
+        "select id,code from events where title='Живой разговор · Вместе о важном'",
+      )
+    ).rows[0];
+    const before = (
+      await db.query("select count(*)::int n from polls where event_id=$1", [
+        e.id,
+      ])
+    ).rows[0].n;
+    await db.exec(buildSessionSql(e.id));
+    await db.exec(buildSessionSql(e.id));
+    let b = (
+      await as(admin, () => db.query("select admin_board($1) b", [e.code]))
+    ).rows[0].b;
+    assert.equal(b.polls.length, before + 2);
+    const cloud = b.polls.find((p) => p.metadata.session_stage === "cloud"),
+      final = b.polls.find((p) => p.metadata.session_stage === "final");
+    assert.equal(
+      b.polls.filter((p) => p.metadata.archived === "true").length,
+      before,
+    );
+    assert.equal(
+      b.polls.find((p) => p.metadata.aggregate_key === "missing").n,
+      141,
+    );
+    await as(admin, () =>
+      db.query("select control_stage($1,$2,'open')", [e.code, cloud.id]),
+    );
+    await db.exec(buildSessionSql(e.id));
+    for (let i = 0; i < 13; i++)
+      await db.query(
+        "insert into open_responses(event_id,poll_id,text,status) values($1,$2,$3,'approved')",
+        [e.id, cloud.id, i % 2 ? "Диалог" : "  диалог  "],
+      );
+    await db.query(
+      "insert into open_responses(event_id,poll_id,text,status) values($1,$2,'НЕ ПУБЛИКОВАТЬ','pending'),($1,$2,'СКРЫТЬ','hidden')",
+      [e.id, cloud.id],
+    );
+    b = (await as(null, () => db.query("select public_board($1) b", [e.code])))
+      .rows[0].b;
+    assert.equal(b.polls.length, 1);
+    assert.deepEqual(b.polls[0].cloud_words, [{ text: "диалог", count: 13 }]);
+    assert.ok(!JSON.stringify(b).includes("НЕ ПУБЛИКОВАТЬ"));
+    await as(admin, () =>
+      db.query("select control_stage($1,$2,'open')", [e.code, final.id]),
+    );
+    const response = (
+      await db.query(
+        "insert into open_responses(event_id,poll_id,text) values($1,$2,'Только после одобрения') returning id",
+        [e.id, final.id],
+      )
+    ).rows[0].id;
+    await as(admin, () =>
+      assert.rejects(
+        db.query("select present_response($1,$2,$3)", [
+          e.code,
+          final.id,
+          response,
+        ]),
+      ),
+    );
+    await as(null, () =>
+      assert.rejects(
+        db.query("select present_response($1,$2,$3)", [
+          e.code,
+          final.id,
+          response,
+        ]),
+      ),
+    );
+    await as(admin, () =>
+      assert.rejects(
+        db.query("select present_response($1,$2,$3)", [
+          e.code,
+          final.id,
+          payload.id,
+        ]),
+      ),
+    );
+    await db.query("update open_responses set status='approved' where id=$1", [
+      response,
+    ]);
+    await as(admin, () =>
+      db.query("select present_response($1,$2,$3)", [
+        e.code,
+        final.id,
+        response,
+      ]),
+    );
+    await as(admin, () =>
+      db.query("select submit_response($1,$2,'{}',$3)", [
+        e.code,
+        final.id,
+        "Ответ на финальный вопрос. ".repeat(25),
+      ]),
+    );
+    for (let i = 0; i < 12; i++)
+      await db.query(
+        "insert into open_responses(event_id,poll_id,text,status) values($1,$2,$3,'approved')",
+        [e.id, final.id, "Ответ " + i],
+      );
+    b = (await as(null, () => db.query("select public_board($1) b", [e.code])))
+      .rows[0].b;
+    assert.equal(b.polls.length, 1);
+    assert.equal(b.polls[0].id, final.id);
+    assert.equal(b.polls[0].metadata.featured_response, response);
+    assert.equal(b.polls[0].cards.length, 13);
+    await as(admin, () =>
+      db.query("select manage_event($1,'moderate',$2)", [
+        e.code,
+        {
+          id: response,
+          text: "Только после одобрения",
+          status: "hidden",
+          category: "",
+          tags: "",
+          resolution: "требуется ответ",
+        },
+      ]),
+    );
+    b = (await as(null, () => db.query("select public_board($1) b", [e.code])))
+      .rows[0].b;
+    assert.ok(!JSON.stringify(b).includes("Только после одобрения"));
+    await as(admin, () =>
+      db.query("select control_stage($1,$2,'results')", [e.code, final.id]),
+    );
+    await as(moderator, () =>
+      assert.rejects(
+        db.query("select control_stage($1,$2,'open')", [e.code, final.id]),
+      ),
+    );
+    await as(operator, () =>
+      assert.rejects(
+        db.query("select control_stage($1,$2,'open')", [e.code, final.id]),
+      ),
+    );
   },
 );
 const latencies = [],

@@ -1,6 +1,6 @@
 import type { Board } from "./model";
 import { exportRows } from "./model";
-export async function exportXlsx(board: Board) {
+export async function exportXlsx(board: Board, filename = "event.xlsx") {
   const module = await import("exceljs");
   const { Workbook } = module.default || module;
   const workbook = new Workbook();
@@ -19,7 +19,7 @@ export async function exportXlsx(board: Board) {
   );
   const a = document.createElement("a");
   a.href = url;
-  a.download = "event.xlsx";
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

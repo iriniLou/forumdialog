@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { initialDemo, type Board, type Poll, type Category } from "./model";
+import { type Board, type Poll, type Category } from "./model";
+import { initialSessionDemo, cloudWords, sessionStage } from "./session";
 const url = import.meta.env.VITE_SUPABASE_URL,
   key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 if (Boolean(url) !== Boolean(key))
@@ -16,7 +17,9 @@ if (!sid) {
   sessionStorage.setItem(sessionKey, sid);
 }
 function read(): Board {
-  return JSON.parse(localStorage.getItem(storage) || "null") ?? initialDemo();
+  return (
+    JSON.parse(localStorage.getItem(storage) || "null") ?? initialSessionDemo()
+  );
 }
 function write(b: Board) {
   localStorage.setItem(storage, JSON.stringify(b));
@@ -112,11 +115,49 @@ export async function action(
   op: string,
   payload: Record<string, unknown> = {},
 ) {
+  if (db && op === "stage")
+    return rpc("control_stage", {
+      p_code: code,
+      p_poll: payload.id,
+      p_state: payload.status,
+    });
+  if (db && op === "present")
+    return rpc("present_response", {
+      p_code: code,
+      p_poll: payload.id,
+      p_response: payload.response_id || null,
+    });
   if (db)
     return rpc("manage_event", { p_code: code, p_op: op, p_payload: payload });
   let b = read();
   const p = b.polls.find((p) => p.id === payload.id);
   switch (op) {
+    case "stage":
+      if (!p || !sessionStage(p)) throw Error("Этап не найден");
+      b.polls.forEach((q) => {
+        if (q.id !== p.id && (q.status === "open" || q.status === "results"))
+          q.status = "closed";
+      });
+      p.status = payload.status as Poll["status"];
+      b.hidden = false;
+      break;
+    case "present":
+      if (!p || sessionStage(p) !== "final") throw Error("Выберите финал");
+      if (
+        payload.response_id &&
+        !b.responses?.some(
+          (r) =>
+            r.id === payload.response_id &&
+            r.poll_id === p.id &&
+            r.status === "approved",
+        )
+      )
+        throw Error("Ответ ещё не одобрен");
+      p.metadata = {
+        ...p.metadata,
+        featured_response: String(payload.response_id || ""),
+      };
+      break;
     case "hide":
       b.hidden = Boolean(payload.hidden);
       break;
@@ -174,7 +215,7 @@ export async function action(
       });
       Object.assign(r, payload);
       const poll = b.polls.find((p) => p.id === r.poll_id)!;
-      poll.cards = b
+      const approved = b
         .responses!.filter(
           (x) => x.poll_id === r.poll_id && x.status === "approved",
         )
@@ -182,8 +223,16 @@ export async function action(
           id: x.id,
           text: x.text,
           category: x.category as Category,
-        }))
-        .slice(0, 10);
+        }));
+      poll.cards = sessionStage(poll)
+        ? approved.reverse()
+        : approved.slice(0, 10);
+      if (sessionStage(poll) === "cloud")
+        poll.cloud_words = cloudWords(
+          b.responses!.filter(
+            (x) => x.poll_id === poll.id && x.status === "approved",
+          ),
+        );
       break;
     }
     case "import":
@@ -259,7 +308,7 @@ export async function action(
       break;
     }
     case "reset":
-      b = initialDemo();
+      b = initialSessionDemo();
       Object.keys(localStorage)
         .filter((k) => k.startsWith("vote:"))
         .forEach((k) => localStorage.removeItem(k));

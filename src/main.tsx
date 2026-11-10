@@ -18,6 +18,9 @@ import "./style.css";
 import rovLogo from "./assets/rov-logo.png";
 import { appPath, base, defaultCode, routeParts } from "./routes";
 import { exportXlsx } from "./xlsx";
+import { sessionStage } from "./session";
+import { SessionAdmin } from "./SessionAdmin";
+import { SessionScreen } from "./SessionStage";
 const parts = routeParts,
   mode = parts[1] || "home";
 function download(name: string, data: string, type = "text/plain") {
@@ -290,7 +293,11 @@ function App() {
         {b && (
           <>
             {mode === "admin" ? (
-              <Admin b={b} busy={busy} run={run} setCode={setCode} />
+              b.polls.some((p) => sessionStage(p)) ? (
+                <SessionAdmin b={b} busy={busy} run={run} />
+              ) : (
+                <Admin b={b} busy={busy} run={run} setCode={setCode} />
+              )
             ) : (
               <>
                 <div className="session">
@@ -335,6 +342,25 @@ function App() {
                         </p>
                       ))}
                   </section>
+                ) : sessionStage(poll) ? (
+                  mode === "screen" ? (
+                    <SessionScreen
+                      key={poll.id}
+                      poll={poll}
+                      joinUrl={joinUrl}
+                    />
+                  ) : (
+                    <>
+                      <div className="poll-heading">
+                        <h1>{poll.title}</h1>
+                      </div>
+                      {poll.status === "open" ? (
+                        <Participant key={poll.id} poll={poll} code={code} />
+                      ) : (
+                        <p>Приём ответов завершён.</p>
+                      )}
+                    </>
+                  )
                 ) : (
                   <>
                     <div className="poll-heading">

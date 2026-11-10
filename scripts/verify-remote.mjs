@@ -418,6 +418,124 @@ try {
       await screen.reload();
       await screen.getByText("N = " + n, { exact: true }).waitFor();
     }
+    step =
+      "two-stage cloud aggregation and moderation through published controls";
+    checked(
+      await root
+        .from("polls")
+        .update({ metadata: { session_stage: "cloud" } })
+        .eq("id", live.id),
+    );
+    checked(
+      await root
+        .from("polls")
+        .update({
+          metadata: { session_stage: "final" },
+          source: "live",
+          max_length: 1000,
+        })
+        .eq("id", oral.id),
+    );
+    checked(
+      await root.from("open_responses").insert(
+        Array.from({ length: 20 }, (_, i) => ({
+          event_id: eventId,
+          poll_id: live.id,
+          text: i % 2 ? "ТЕСТ: диалог" : "тест: диалог",
+          status: "approved",
+        })),
+      ),
+    );
+    checked(
+      await admin.rpc("control_stage", {
+        p_code: code,
+        p_poll: live.id,
+        p_state: "open",
+      }),
+    );
+    await operator.reload();
+    await operator.getByRole("tab", { name: /Облако слов/ }).waitFor();
+    assert.equal(await operator.getByRole("tab").count(), 2);
+    await screen.reload();
+    await screen.locator("text[data-word-count='20']").waitFor();
+    assert.ok(
+      await screen.evaluate(
+        () => document.documentElement.scrollHeight <= innerHeight + 2,
+      ),
+    );
+    assert.equal(
+      (await snapshot()).polls[0].cloud_words.find(
+        (w) => w.text === "тест: диалог",
+      ).count,
+      20,
+    );
+    await screen.screenshot({
+      path: "deployment-evidence/folder-cloud-test.png",
+    });
+    await operator.getByRole("tab", { name: /Письменные ответы/ }).click();
+    await operator
+      .getByRole("button", { name: "Открыть приём", exact: true })
+      .click();
+    const finalContext = await browser.newContext(),
+      finalParticipant = await finalContext.newPage();
+    await finalParticipant.setViewportSize({ width: 360, height: 780 });
+    await finalParticipant.goto(origin + base + "join/" + code);
+    const finalText = (
+      "ТЕСТ: ответ на последний вопрос. " +
+      "Дам каждому ученику время высказаться и услышу разные мнения. ".repeat(8)
+    ).trim();
+    await finalParticipant
+      .locator("textarea[maxlength='1000']")
+      .fill(finalText);
+    await finalParticipant
+      .getByRole("button", { name: "Отправить ответ", exact: true })
+      .click();
+    await finalParticipant.getByText("Спасибо, ответ принят").waitFor();
+    await screen.reload();
+    assert.ok(!(await screen.getByText(finalText, { exact: true }).count()));
+    await operator
+      .getByRole("button", { name: "Одобрить и показать", exact: true })
+      .click();
+    const finalRow = await waitForAdminRow(
+      (r) =>
+        r.poll_id === oral.id &&
+        r.text === finalText &&
+        r.status === "approved",
+    );
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (
+        (await snapshot()).polls[0]?.metadata?.featured_response === finalRow.id
+      )
+        break;
+      if (attempt === 99) throw Error("Featured answer was not selected");
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await screen.reload();
+    await screen
+      .locator(".featured-answer")
+      .filter({ hasText: finalText })
+      .waitFor();
+    await screen.screenshot({
+      path: "deployment-evidence/final-answer-test.png",
+    });
+    const csvDownload = operator.waitForEvent("download");
+    await operator
+      .getByRole("button", { name: "Скачать CSV", exact: true })
+      .click();
+    const csvStream = await (await csvDownload).createReadStream(),
+      csvChunks = [];
+    for await (const chunk of csvStream) csvChunks.push(chunk);
+    assert.ok(Buffer.concat(csvChunks).toString("utf8").includes(finalText));
+    assert.ok(
+      !Buffer.concat(csvChunks).toString("utf8").includes("тест: диалог"),
+    );
+    await operator
+      .getByRole("button", { name: "Завершить приём", exact: true })
+      .click();
+    await finalParticipant.reload();
+    await finalParticipant.getByText("Приём ответов завершён.").waitFor();
+    assert.equal(await finalParticipant.locator("textarea").count(), 0);
+    await finalContext.close();
     step = "canonical participant and projector URLs";
     const realParticipant = await context.newPage();
     await realParticipant.goto(origin + base + "join/" + realCode);
@@ -456,6 +574,8 @@ try {
     await ownerPage
       .getByRole("heading", { name: "Очередь модерации" })
       .waitFor();
+    assert.equal(await ownerPage.getByRole("tab").count(), 2);
+    assert.equal(await ownerPage.locator(".poll-admin").count(), 0);
     const realPolls = checked(
       await root
         .from("polls")
@@ -504,6 +624,7 @@ try {
             "360px layout",
             "aggregate update without redeployment",
             "canonical real event routes and organiser login",
+            "two stage controls, folder cloud from all approved phrases, final spotlight and scoped CSV export",
           ],
         },
         null,
@@ -514,6 +635,22 @@ try {
     await command("moderate", { ...payload, status: "hidden" });
     assert.equal((await snapshot()).polls[0].cards.length, 0);
     step = "350 concurrent phone polling requests";
+    checked(
+      await root
+        .from("polls")
+        .update({ metadata: { session_stage: "cloud" } })
+        .eq("id", live.id),
+    );
+    checked(
+      await root
+        .from("open_responses")
+        .update({ status: "approved" })
+        .eq("poll_id", live.id),
+    );
+    assert.equal(
+      (await snapshot()).polls[0].cloud_words.reduce((n, w) => n + w.count, 0),
+      350,
+    );
     await Promise.all(
       clients.map(async (c) => {
         const p = checked(await c.rpc("public_board", { p_code: code }));

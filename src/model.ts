@@ -19,6 +19,7 @@ export type Poll = {
   n: number;
   imported_n?: number;
   cards: { id: string; text: string; category: Category }[];
+  cloud_words?: { text: string; count: number }[];
 };
 export type ResponseRow = {
   id: string;
