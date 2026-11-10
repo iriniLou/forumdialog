@@ -25,7 +25,9 @@ const users = [],
   clients = [],
   latencies = [];
 const published = (path) => {
-  const target = new URL(path, origin + base);
+  // Load the real index directly: Pages' 404 redirect drops arbitrary query parameters.
+  const target = new URL(origin + base);
+  target.searchParams.set("route", path);
   target.searchParams.set("v", process.env.GITHUB_SHA || String(Date.now()));
   return target.href;
 };
@@ -292,7 +294,7 @@ try {
     mkdirSync("deployment-evidence", { recursive: true });
     await screen.screenshot({ path: "deployment-evidence/projector-test.png" });
     await command("moderate", { ...payload, status: "hidden" });
-    await screen.reload();
+    await screen.goto(published("screen/" + code));
     assert.equal(await screen.getByText(r.text, { exact: true }).count(), 0);
     step = "oral entry: submit from published admin";
     // Delay the response after the real DB commit to exercise a slow connection.
@@ -369,7 +371,7 @@ try {
         throw Error("Approved oral response was not published");
       await new Promise((r) => setTimeout(r, 100));
     }
-    await screen.reload();
+    await screen.goto(published("screen/" + code));
     await screen.getByText(oralText, { exact: true }).waitFor();
     assert.equal(await screen.getByText(/N =/).count(), 0);
     assert.equal(await screen.locator(".cards .pill").count(), 0);
@@ -423,7 +425,7 @@ try {
         await agg
           .getByRole("button", { name: "Показать итоги", exact: true })
           .click();
-      await screen.reload();
+      await screen.goto(published("screen/" + code));
       await screen.getByText("N = " + n, { exact: true }).waitFor();
     }
     step = "two-stage: configure isolated cloud and final questions";
@@ -462,10 +464,10 @@ try {
       }),
     );
     step = "two-stage: published admin shows two tabs";
-    await operator.reload();
+    await operator.goto(published("admin"));
     await operator.getByRole("tab", { name: /Облако слов/ }).waitFor();
     assert.equal(await operator.getByRole("tab").count(), 2);
-    await screen.reload();
+    await screen.goto(published("screen/" + code));
     step = "two-stage: published cloud contains all approved phrases";
     await screen.locator("text[data-word-count='20']").waitFor();
     step = "two-stage: cloud and QR fit the projector viewport";
@@ -501,10 +503,10 @@ try {
       .locator("textarea[maxlength='1000']")
       .fill(finalText);
     await finalParticipant
-      .getByRole("button", { name: "Отправить ответ", exact: true })
+      .getByRole("button", { name: /^Отправить ответ/ })
       .click();
     await finalParticipant.getByText("Спасибо, ответ принят").waitFor();
-    await screen.reload();
+    await screen.goto(published("screen/" + code));
     assert.ok(!(await screen.getByText(finalText, { exact: true }).count()));
     step = "two-stage: approve final answer and select it for the screen";
     await operator
@@ -524,7 +526,7 @@ try {
       if (attempt === 99) throw Error("Featured answer was not selected");
       await new Promise((r) => setTimeout(r, 100));
     }
-    await screen.reload();
+    await screen.goto(published("screen/" + code));
     step = "two-stage: show selected final answer on projector";
     await screen
       .locator(".featured-answer")
@@ -549,7 +551,7 @@ try {
     await operator
       .getByRole("button", { name: "Завершить приём", exact: true })
       .click();
-    await finalParticipant.reload();
+    await finalParticipant.goto(published("join/" + code));
     await finalParticipant.getByText("Приём ответов завершён.").waitFor();
     assert.equal(await finalParticipant.locator("textarea").count(), 0);
     await finalContext.close();
