@@ -24,14 +24,22 @@ const make = (key) =>
 const users = [],
   clients = [],
   latencies = [];
+const published = (path) => {
+  const target = new URL(path, origin + base);
+  target.searchParams.set("v", process.env.GITHUB_SHA || String(Date.now()));
+  return target.href;
+};
 let eventId,
   browser,
   step = "initialise";
 const checked = (r) => {
-  if (r.error)
-    throw Error(
+  if (r.error) {
+    const error = Error(
       `Operation rejected (${r.error.code || r.status || "unknown"})`,
     );
+    error.code = r.error.code;
+    throw error;
+  }
   return r.data;
 };
 const code = "test" + randomUUID().replaceAll("-", "").slice(0, 12),
@@ -249,7 +257,7 @@ try {
     const context = await browser.newContext();
     const participant = await context.newPage();
     await participant.setViewportSize({ width: 360, height: 780 });
-    await participant.goto(origin + base + "join/" + code);
+    await participant.goto(published("join/" + code));
     await participant
       .getByRole("heading", { name: "ТЕСТ: короткая фраза" })
       .waitFor();
@@ -266,7 +274,7 @@ try {
       ),
     );
     const operator = await context.newPage();
-    await operator.goto(origin + base + "admin");
+    await operator.goto(published("admin"));
     await operator.getByLabel("Почта организатора").fill(email);
     await operator.getByLabel("Пароль", { exact: true }).fill(password);
     await operator.getByRole("button", { name: "Войти", exact: true }).click();
@@ -279,7 +287,7 @@ try {
       .waitFor();
     const screen = await context.newPage();
     await screen.setViewportSize({ width: 1920, height: 1080 });
-    await screen.goto(origin + base + "screen/" + code);
+    await screen.goto(published("screen/" + code));
     await screen.getByText(r.text, { exact: true }).waitFor();
     mkdirSync("deployment-evidence", { recursive: true });
     await screen.screenshot({ path: "deployment-evidence/projector-test.png" });
@@ -418,8 +426,7 @@ try {
       await screen.reload();
       await screen.getByText("N = " + n, { exact: true }).waitFor();
     }
-    step =
-      "two-stage cloud aggregation and moderation through published controls";
+    step = "two-stage: configure isolated cloud and final questions";
     checked(
       await root
         .from("polls")
@@ -446,6 +453,7 @@ try {
         })),
       ),
     );
+    step = "two-stage: open cloud through protected RPC";
     checked(
       await admin.rpc("control_stage", {
         p_code: code,
@@ -453,11 +461,14 @@ try {
         p_state: "open",
       }),
     );
+    step = "two-stage: published admin shows two tabs";
     await operator.reload();
     await operator.getByRole("tab", { name: /Облако слов/ }).waitFor();
     assert.equal(await operator.getByRole("tab").count(), 2);
     await screen.reload();
+    step = "two-stage: published cloud contains all approved phrases";
     await screen.locator("text[data-word-count='20']").waitFor();
+    step = "two-stage: cloud and QR fit the projector viewport";
     assert.ok(
       await screen.evaluate(
         () => document.documentElement.scrollHeight <= innerHeight + 2,
@@ -472,6 +483,7 @@ try {
     await screen.screenshot({
       path: "deployment-evidence/folder-cloud-test.png",
     });
+    step = "two-stage: open final through published admin";
     await operator.getByRole("tab", { name: /Письменные ответы/ }).click();
     await operator
       .getByRole("button", { name: "Открыть приём", exact: true })
@@ -479,7 +491,8 @@ try {
     const finalContext = await browser.newContext(),
       finalParticipant = await finalContext.newPage();
     await finalParticipant.setViewportSize({ width: 360, height: 780 });
-    await finalParticipant.goto(origin + base + "join/" + code);
+    step = "two-stage: submit long final answer from independent phone";
+    await finalParticipant.goto(published("join/" + code));
     const finalText = (
       "ТЕСТ: ответ на последний вопрос. " +
       "Дам каждому ученику время высказаться и услышу разные мнения. ".repeat(8)
@@ -493,6 +506,7 @@ try {
     await finalParticipant.getByText("Спасибо, ответ принят").waitFor();
     await screen.reload();
     assert.ok(!(await screen.getByText(finalText, { exact: true }).count()));
+    step = "two-stage: approve final answer and select it for the screen";
     await operator
       .getByRole("button", { name: "Одобрить и показать", exact: true })
       .click();
@@ -511,6 +525,7 @@ try {
       await new Promise((r) => setTimeout(r, 100));
     }
     await screen.reload();
+    step = "two-stage: show selected final answer on projector";
     await screen
       .locator(".featured-answer")
       .filter({ hasText: finalText })
@@ -518,6 +533,7 @@ try {
     await screen.screenshot({
       path: "deployment-evidence/final-answer-test.png",
     });
+    step = "two-stage: download final CSV without cloud answers";
     const csvDownload = operator.waitForEvent("download");
     await operator
       .getByRole("button", { name: "Скачать CSV", exact: true })
@@ -529,6 +545,7 @@ try {
     assert.ok(
       !Buffer.concat(csvChunks).toString("utf8").includes("тест: диалог"),
     );
+    step = "two-stage: stop accepting final answers";
     await operator
       .getByRole("button", { name: "Завершить приём", exact: true })
       .click();
@@ -538,12 +555,12 @@ try {
     await finalContext.close();
     step = "canonical participant and projector URLs";
     const realParticipant = await context.newPage();
-    await realParticipant.goto(origin + base + "join/" + realCode);
+    await realParticipant.goto(published("join/" + realCode));
     await realParticipant.locator("footer").waitFor();
     assert.equal(await realParticipant.locator(".demo").count(), 0);
     assert.equal(await realParticipant.getByRole("alert").count(), 0);
     const realScreen = await context.newPage();
-    await realScreen.goto(origin + base + "screen/" + realCode);
+    await realScreen.goto(published("screen/" + realCode));
     await realScreen.locator("footer").waitFor();
     assert.equal(await realScreen.locator(".demo").count(), 0);
     step = "real organiser role and current preforum aggregates";
@@ -571,6 +588,10 @@ try {
     );
     const ownerPage = await browser.newPage();
     await ownerPage.goto(link.properties.action_link);
+    await ownerPage
+      .getByRole("heading", { name: "Очередь модерации" })
+      .waitFor();
+    await ownerPage.goto(published("admin"));
     await ownerPage
       .getByRole("heading", { name: "Очередь модерации" })
       .waitFor();
@@ -697,9 +718,18 @@ try {
   console.log(
     `::notice title=Remote verification ${phase}::Accepted ${count}/${count}; p95 ${Math.round(latencies[Math.floor(latencies.length * 0.95)])} ms; synthetic requests from one GitHub runner.`,
   );
-} catch {
+} catch (error) {
+  const lines = [
+    ...String(error.stack || "").matchAll(/verify-remote\.mjs:(\d+)/g),
+  ]
+    .map((m) => m[1])
+    .slice(0, 4)
+    .join(",");
+  const code = /^[A-Z0-9_]{1,30}$/.test(String(error.code || ""))
+    ? error.code
+    : "unknown";
   console.error(
-    `::error title=Remote verification ${phase}::Failed at ${step}. Publication is not considered verified.`,
+    `::error title=Remote verification ${phase}::Failed at ${step}; code ${code}; script lines ${lines}. Publication is not considered verified.`,
   );
   process.exitCode = 1;
 } finally {
