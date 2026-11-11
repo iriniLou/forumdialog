@@ -45,6 +45,19 @@ export function WordCloud({ words, id }: { words: CloudWord[]; id: string }) {
             {w.text}
           </text>
         ))}
+        {!!words.length && (
+          <text
+            x="500"
+            y="985"
+            textAnchor="middle"
+            fontFamily="Arial, Helvetica, sans-serif"
+            fontSize="20"
+            fill="#6d635c"
+          >
+            {words.reduce((total, word) => total + word.count, 0)} ответов ·{" "}
+            {words.length} разных фраз
+          </text>
+        )}
         {!words.length && (
           <text
             x="500"

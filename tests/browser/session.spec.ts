@@ -200,3 +200,84 @@ test("projector folder lays out a large moderated cloud without clipping", async
     fullPage: true,
   });
 });
+
+test("350 distinct phrases are all visible on the projector", async ({
+  page,
+}) => {
+  const b = initialSessionDemo();
+  const subjects = [
+    "диалог",
+    "доверие",
+    "уважение",
+    "сотрудничество",
+    "поддержка",
+    "выбор",
+    "общее дело",
+    "размышление",
+    "участие",
+    "понимание",
+    "открытость",
+    "внимание",
+    "любопытство",
+    "забота",
+    "честность",
+    "доброта",
+    "разговор",
+    "партнёрство",
+    "общение",
+    "взаимопомощь",
+    "единство",
+    "развитие",
+    "воспитание",
+    "поиск ответов",
+    "обмен опытом",
+  ];
+  const contexts = [
+    "в классе",
+    "в школе",
+    "в семье",
+    "между поколениями",
+    "вместе с детьми",
+    "с учителем",
+    "в общем деле",
+    "без спешки",
+    "на равных",
+    "каждый день",
+    "на уроке",
+    "после уроков",
+    "в команде",
+    "с друзьями",
+  ];
+  const rows = subjects.flatMap((subject) =>
+    contexts.map((context) => ({ text: subject + " " + context })),
+  );
+  expect(rows).toHaveLength(350);
+  expect(new Set(rows.map((r) => r.text)).size).toBe(350);
+  expect(rows.every((r) => r.text.length <= 50)).toBe(true);
+  b.polls[0].cloud_words = cloudWords(rows);
+  await page
+    .context()
+    .addInitScript(
+      (b) => localStorage.setItem("forumdialog.demo.v1", JSON.stringify(b)),
+      b,
+    );
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/screen/DEMO");
+  await expect(page.locator("text[data-word-count]")).toHaveCount(350);
+  await expect(page.getByText("350 ответов · 350 разных фраз")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.screenshot({
+    path: "docs/screenshots/11-cloud-350-distinct.png",
+    fullPage: true,
+  });
+  const sizes = await page
+    .locator("text[data-word-count]")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getBoundingClientRect().height),
+    );
+  console.log(
+    "350 distinct phrases: rendered text height range in pixels",
+    Math.min(...sizes),
+    Math.max(...sizes),
+  );
+});
