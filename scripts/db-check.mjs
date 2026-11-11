@@ -18,6 +18,9 @@ await db.exec(
 await db.exec(
   readFileSync("supabase/migrations/004_two_stage_session.sql", "utf8"),
 );
+await db.exec(
+  readFileSync("supabase/migrations/005_session_editing.sql", "utf8"),
+);
 const admin = randomUUID(),
   operator = randomUUID(),
   moderator = randomUUID();
@@ -474,12 +477,52 @@ await pass(
     await as(admin, () =>
       db.query("select control_stage($1,$2,'open')", [e.code, final.id]),
     );
+    assert.equal(cloud.max_length, 50);
+    assert.equal(final.max_length, 300);
+    await as(admin, () =>
+      assert.rejects(
+        db.query("select submit_response($1,$2,'{}',$3)", [
+          e.code,
+          final.id,
+          "я".repeat(301),
+        ]),
+      ),
+    );
     const response = (
       await db.query(
         "insert into open_responses(event_id,poll_id,text) values($1,$2,'Только после одобрения') returning id",
         [e.id, final.id],
       )
     ).rows[0].id;
+    await as(moderator, () =>
+      assert.rejects(
+        db.query("select rename_final_question($1,$2,$3)", [
+          e.code,
+          final.id,
+          "Чужая правка",
+        ]),
+      ),
+    );
+    await as(admin, () =>
+      db.query("select rename_final_question($1,$2,$3)", [
+        e.code,
+        final.id,
+        "Новый финальный вопрос",
+      ]),
+    );
+    assert.equal(
+      (await db.query("select title from polls where id=$1", [final.id]))
+        .rows[0].title,
+      "Новый финальный вопрос",
+    );
+    assert.equal(
+      (
+        await db.query("select text from open_responses where id=$1", [
+          response,
+        ])
+      ).rows[0].text,
+      "Только после одобрения",
+    );
     await as(admin, () =>
       assert.rejects(
         db.query("select present_response($1,$2,$3)", [
@@ -521,7 +564,7 @@ await pass(
       db.query("select submit_response($1,$2,'{}',$3)", [
         e.code,
         final.id,
-        "Ответ на финальный вопрос. ".repeat(25),
+        "Ответ на финальный вопрос. ".repeat(10),
       ]),
     );
     for (let i = 0; i < 12; i++)

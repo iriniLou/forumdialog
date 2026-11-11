@@ -6,7 +6,7 @@ import { insideFolder, layoutCloud } from "../src/cloud-layout.ts";
 test("two exact slide questions, scoped final export, whole phrases and case-insensitive frequencies", () => {
   const b = initialSessionDemo();
   assert.equal(b.polls.length, 2);
-  assert.equal(b.polls[1].max_length, 1000);
+  assert.equal(b.polls[1].max_length, 300);
   assert.deepEqual(
     cloudWords([
       { text: " Диалог " },

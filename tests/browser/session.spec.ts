@@ -63,11 +63,11 @@ test("two stages: cloud moderation and frequency, final spotlight, closure and c
   await participant.reload();
   await expect(participant.locator("textarea")).toHaveAttribute(
     "maxlength",
-    "1000",
+    "300",
   );
   const finalText = (
     "ДЕМО: В понедельник начну с вопроса детям. " +
-    "Дам время высказаться и обсудить разные позиции. ".repeat(8)
+    "Дам время высказаться и обсудить разные позиции. ".repeat(3)
   ).trim();
   await participant.locator("textarea").fill(finalText);
   await participant.screenshot({
@@ -88,6 +88,15 @@ test("two stages: cloud moderation and frequency, final spotlight, closure and c
   await admin
     .getByRole("button", { name: "Одобрить и показать", exact: true })
     .click();
+  await admin
+    .getByLabel("Финальный вопрос", { exact: true })
+    .fill("Какой шаг сделаете в понедельник?");
+  await admin
+    .getByRole("button", { name: "Сохранить вопрос", exact: true })
+    .click();
+  await expect(
+    admin.getByRole("heading", { name: "Какой шаг сделаете в понедельник?" }),
+  ).toBeVisible();
   await screen.reload();
   await expect(screen.locator(".featured-answer")).toHaveText(finalText);
   await screen.screenshot({
@@ -162,11 +171,9 @@ test("projector folder lays out a large moderated cloud without clipping", async
     "возможность услышать",
   ];
   b.polls[0].cloud_words = cloudWords(
-    phrases.flatMap((text, i) =>
-      Array.from({ length: 1 + Math.floor((phrases.length - i) / 3) }, () => ({
-        text,
-      })),
-    ),
+    Array.from({ length: 350 }, (_, i) => ({
+      text: phrases[i < 175 ? i % 5 : i % phrases.length],
+    })),
   );
   await page
     .context()
@@ -179,11 +186,17 @@ test("projector folder lays out a large moderated cloud without clipping", async
   await expect(page.locator("text[data-word-count]")).toHaveCount(
     phrases.length,
   );
+  expect(b.polls[0].cloud_words.reduce((n, w) => n + w.count, 0)).toBe(350);
   const svg = page.locator(".folder-cloud");
   const bounds = await svg.boundingBox();
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(1080);
   await page.screenshot({
     path: "docs/screenshots/05-cloud.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.screenshot({
+    path: "docs/screenshots/10-cloud-350-laptop.png",
     fullPage: true,
   });
 });

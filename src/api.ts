@@ -115,6 +115,12 @@ export async function action(
   op: string,
   payload: Record<string, unknown> = {},
 ) {
+  if (db && op === "rename_final")
+    return rpc("rename_final_question", {
+      p_code: code,
+      p_poll: payload.id,
+      p_title: payload.title,
+    });
   if (db && op === "stage")
     return rpc("control_stage", {
       p_code: code,
@@ -132,6 +138,15 @@ export async function action(
   let b = read();
   const p = b.polls.find((p) => p.id === payload.id);
   switch (op) {
+    case "rename_final":
+      if (!p || sessionStage(p) !== "final") throw Error("Выберите финал");
+      if (
+        !String(payload.title || "").trim() ||
+        String(payload.title).trim().length > 500
+      )
+        throw Error("Вопрос: от 1 до 500 символов");
+      p.title = String(payload.title).trim();
+      break;
     case "stage":
       if (!p || !sessionStage(p)) throw Error("Этап не найден");
       b.polls.forEach((q) => {

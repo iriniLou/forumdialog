@@ -5,13 +5,13 @@ export const sessionQuestions = [
     title: "Так что для вас «Разговоры о важном»?",
     stage: "cloud",
     slide: "3",
-    max: 80,
+    max: 50,
   },
   {
     title: "Что попробуете уже в ближайший понедельник?",
     stage: "final",
     slide: "34",
-    max: 1000,
+    max: 300,
   },
 ] as const;
 

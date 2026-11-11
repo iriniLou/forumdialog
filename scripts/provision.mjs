@@ -128,6 +128,15 @@ export async function provision({
         readFileSync("supabase/migrations/004_two_stage_session.sql", "utf8") +
         "\ncommit;",
     );
+  const editingUpgrade = await sql(
+    "select to_regprocedure('public.rename_final_question(text,uuid,text)') is not null as present",
+  );
+  if (!editingUpgrade[0]?.present)
+    await sql(
+      "begin;\n" +
+        readFileSync("supabase/migrations/005_session_editing.sql", "utf8") +
+        "\ncommit;",
+    );
   let events = await sql(
     "select id,code from public.events where title='Живой разговор · Вместе о важном' and date='2026-11-13' and status='active'",
   );

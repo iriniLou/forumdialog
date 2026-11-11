@@ -441,7 +441,7 @@ try {
         .update({
           metadata: { session_stage: "final" },
           source: "live",
-          max_length: 1000,
+          max_length: 300,
         })
         .eq("id", oral.id),
     );
@@ -497,10 +497,10 @@ try {
     await finalParticipant.goto(published("join/" + code));
     const finalText = (
       "ТЕСТ: ответ на последний вопрос. " +
-      "Дам каждому ученику время высказаться и услышу разные мнения. ".repeat(8)
+      "Дам каждому ученику время высказаться и услышу разные мнения. ".repeat(3)
     ).trim();
     await finalParticipant
-      .locator("textarea[maxlength='1000']")
+      .locator("textarea[maxlength='300']")
       .fill(finalText);
     await finalParticipant
       .getByRole("button", { name: /^Отправить ответ/ })

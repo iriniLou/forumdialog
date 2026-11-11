@@ -92,6 +92,10 @@ export function SessionAdmin({
         ))}
       </div>
       <h2>{p.title}</h2>
+      {operate && !isCloud && (
+        <FinalQuestion key={p.id + p.title} poll={p} busy={busy} run={run} />
+      )}
+
       {operate && (
         <div className="toolbar stage-controls">
           <button
@@ -286,5 +290,39 @@ function SessionResponse({
         )}
       </div>
     </article>
+  );
+}
+
+function FinalQuestion({
+  poll,
+  busy,
+  run,
+}: {
+  poll: Poll;
+  busy: boolean;
+  run: Run;
+}) {
+  const [title, setTitle] = useState(poll.title);
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        await run("rename_final", { id: poll.id, title: title.trim() });
+      }}
+    >
+      <label>
+        Финальный вопрос
+        <textarea
+          aria-label="Финальный вопрос"
+          maxLength={500}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </label>
+      <button disabled={busy || !title.trim() || title.trim() === poll.title}>
+        Сохранить вопрос
+      </button>
+      <p className="note">Ответы сохраняются при изменении вопроса.</p>
+    </form>
   );
 }
